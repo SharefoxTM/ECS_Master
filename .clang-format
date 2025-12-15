@@ -1,0 +1,67 @@
+BasedOnStyle: LLVM
+
+# --- Line Width ---
+ColumnLimit: 120
+
+# --- Indentation (TABS ONLY) ---
+UseTab: Always
+IndentWidth: 2
+TabWidth: 2
+ContinuationIndentWidth: 2
+IndentWrappedFunctionNames: false
+
+# --- Enforce full multi-line style ---
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortLambdasOnASingleLine: false
+
+# --- Arguments & parameters ---
+BinPackArguments: true
+BinPackParameters: true
+
+# --- Braces ---
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterInitializerList: true
+  AfterStruct: true
+  BreakAfterBrace: true    # ← forces .name onto next line
+AllowShortBracedListsOnASingleLine: false
+
+Cpp11BracedListStyle: false
+AllowShortBracedListsOnASingleLine: false
+
+# --- Spacing rules ---
+SpaceBeforeParens: ControlStatements
+SpaceBeforeSquareBrackets: false
+SpacesInParentheses: false
+SpacesInCStyleCastParentheses: false
+SpacesInContainerLiterals: false
+
+# --- Includes ---
+SortIncludes: true
+IncludeBlocks: Merge
+
+# --- Alignment ---
+AlignTrailingComments: true
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignOperands: true
+
+# --- Macro alignment (requested) ---
+AlignConsecutiveMacros: true    # ← aligns #define identifiers and values
+
+# --- Namespaces ---
+NamespaceIndentation: None
+
+# --- Pointer & reference style ---
+PointerAlignment: Right
+ReferenceAlignment: Right
+
+# --- Misc ---
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+ReflowComments: true

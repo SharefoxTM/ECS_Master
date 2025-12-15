@@ -1,0 +1,6 @@
+{
+  "device": "STM32F107RCT6",
+  "toolchain": "CLANG",
+  "core": "Cortex-M3",
+  "order": 0
+}
