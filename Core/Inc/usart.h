@@ -37,13 +37,7 @@ extern UART_HandleTypeDef huart4;
 extern UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN Private defines */
-typedef struct {
-  uint16_t head;
-  uint16_t tail;
-  uint8_t newDataFlag;
-  uint8_t buffer[256];
-} MODBUS_UART_Circ_Buffer_t;
-extern MODBUS_UART_Circ_Buffer_t MODBUS_UART_Circ_Buffer;
+
 /* USER CODE END Private defines */
 
 void MX_UART4_Init(void);
@@ -58,4 +52,3 @@ void printSplashScreen(void);
 #endif
 
 #endif /* __USART_H__ */
-

@@ -25,7 +25,6 @@
 #include "tim.h"
 #include "usart.h"
 
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "TCP/tcp_server.h"
@@ -113,10 +112,10 @@ int main(void) {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    if (MODBUS_UART_Circ_Buffer.newDataFlag == 1) {
-      // TODO: Process new data in MODBUS_UART_Circ_Buffer.buffer
-      MODBUS_UART_Circ_Buffer.newDataFlag = 0;
-    }
+    // if (MODBUS_UART_Circ_Buffer.newDataFlag == 1) {
+    //   // TODO: Process new data in MODBUS_UART_Circ_Buffer.buffer
+    //   MODBUS_UART_Circ_Buffer.newDataFlag = 0;
+    // }
     MX_LWIP_Process();
     gpio_getUserInput();
   }

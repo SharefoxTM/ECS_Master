@@ -21,8 +21,15 @@
 #include "usart.h"
 
 /* USER CODE BEGIN 0 */
+#include "Utilities/log.h"
+#include "modbus/circularBuffer.h"
+#include "modbus/modbus.h"
+#include <string.h>
 
-MODBUS_UART_Circ_Buffer_t MODBUS_UART_Circ_Buffer;
+// Modbus_CircularBuffer_t Modbus_CircularBuffer;
+uint8_t pData[256];
+cbuf_handle_t hcbuf;
+
 /* USER CODE END 0 */
 
 UART_HandleTypeDef huart4;
@@ -224,13 +231,14 @@ void printSplashScreen(void) {
   LOG_INFO("|_|  |_/_/    \\_\\_____/   |_|  |______|_|  \\_\\\r");
 }
 
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size) {
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size) {
   if (huart->Instance == USART1) {
-    MODBUS_UART_Circ_Buffer.newDataFlag = 1;
-    MODBUS_UART_Circ_Buffer.tail = (MODBUS_UART_Circ_Buffer.tail + Size) % 256;
-    HAL_UARTEx_ReceiveToIdle_DMA(
-        &huart1, &MODBUS_UART_Circ_Buffer.buffer[MODBUS_UART_Circ_Buffer.tail],
-        256);
+    CB_Status_t err;
+    err = circular_buf_put(hcbuf, pData, size);
+    if (err != CB_OK) {
+      LOG_ERROR("Circular buffer put error: %d", err);
+    }
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, pData, 256);
   }
 }
 

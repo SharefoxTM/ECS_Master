@@ -53,9 +53,11 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/Core/Src/TCP/cJSON.c
     ${CMAKE_SOURCE_DIR}/Core/Src/modbus/modbus.c
     ${CMAKE_SOURCE_DIR}/Core/Src/modbus/modbus_crc.c
+    ${CMAKE_SOURCE_DIR}/Core/Src/modbus/circularBuffer.c
     ${CMAKE_SOURCE_DIR}/Core/Src/SSD1803A/SSD1803A_driver.c
     ${CMAKE_SOURCE_DIR}/Core/Src/SSD1803A/screens.c
     ${CMAKE_SOURCE_DIR}/Core/Src/Utilities/log.c
+
 )
 
 # Add include paths
