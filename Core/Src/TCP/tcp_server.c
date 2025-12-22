@@ -103,7 +103,6 @@ tcp_server_error_t tcp_server_change_address(struct tcp_pcb *tpcb,
  *  failure
  */
 tcp_server_error_t tcp_server_send_response(struct tcp_pcb *tpcb,
-                                            tcp_server_struct_t *es,
                                             const cJSON *resp) {
   char *resp_out = cJSON_Print(resp);
   tcp_write(tpcb, resp_out, strlen(resp_out), 0);

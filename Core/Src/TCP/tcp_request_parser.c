@@ -72,7 +72,7 @@ tcp_server_error_t parse_init(struct tcp_pcb *newpcb, cJSON *data) {
       cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
       cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
       cJSON_AddItemToObject(resp, "data", data);
-      err = tcp_server_send_response(newpcb, NULL, resp);
+      err = tcp_server_send_response(newpcb, resp);
     }
 
     cJSON_Delete(resp);
@@ -95,7 +95,7 @@ tcp_server_error_t parse_led(struct tcp_pcb *newpcb, cJSON *data) {
     cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("led"));
     cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
     cJSON_AddItemToObject(resp, "data", data);
-    err = tcp_server_send_response(newpcb, NULL, resp);
+    err = tcp_server_send_response(newpcb, resp);
   }
 
   cJSON_Delete(resp);
@@ -117,7 +117,7 @@ tcp_server_error_t parse_take(struct tcp_pcb *newpcb, cJSON *data) {
     cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
     cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
     cJSON_AddItemToObject(resp, "data", data);
-    err = tcp_server_send_response(newpcb, NULL, resp);
+    err = tcp_server_send_response(newpcb, resp);
   }
 
   cJSON_Delete(resp);
@@ -139,7 +139,7 @@ tcp_server_error_t parse_put(struct tcp_pcb *newpcb, cJSON *data) {
     cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
     cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
     cJSON_AddItemToObject(resp, "data", data);
-    err = tcp_server_send_response(newpcb, NULL, resp);
+    err = tcp_server_send_response(newpcb, resp);
   }
 
   cJSON_Delete(resp);
@@ -161,7 +161,7 @@ tcp_server_error_t parse_status(struct tcp_pcb *newpcb, cJSON *data) {
     cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
     cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
     cJSON_AddItemToObject(resp, "data", data);
-    err = tcp_server_send_response(newpcb, NULL, resp);
+    err = tcp_server_send_response(newpcb, resp);
   }
 
   cJSON_Delete(resp);
