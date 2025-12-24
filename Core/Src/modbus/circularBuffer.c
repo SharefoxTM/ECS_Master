@@ -70,7 +70,7 @@ CB_Status_t cbuf_put(cbuf_handle_t c, uint8_t *data, uint32_t length) {
   return CB_OK;
 }
 
-CB_Status_t cbuf_get(cbuf_handle_t c, uint8_t **data, uint32_t length) {
+CB_Status_t cbuf_get(cbuf_handle_t c, uint8_t *data, uint32_t length) {
   if (c == NULL) {
     LOG_ERROR("Parameters of circular buffer were not initialised!");
     return CB_ERR_NULL;
@@ -85,11 +85,11 @@ CB_Status_t cbuf_get(cbuf_handle_t c, uint8_t **data, uint32_t length) {
   }
 
   if (c->tail + length > c->max) {
-    memcpy(*data, &c->buffer[c->tail], c->max - c->tail);
-    memcpy(*data, &c->buffer[0], length - (c->max - c->tail));
+    memcpy(data, &c->buffer[c->tail], c->max - c->tail);
+    memcpy(data, &c->buffer[0], length - (c->max - c->tail));
     c->tail = length - (c->max - c->tail);
   } else {
-    memcpy(*data, &c->buffer[c->tail], length);
+    memcpy(data, &c->buffer[c->tail], length);
     c->tail += length;
   }
 

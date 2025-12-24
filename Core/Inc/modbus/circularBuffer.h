@@ -33,7 +33,7 @@ cbuf_handle_t cbuf_init(uint8_t *buffer, size_t size);
 CB_Status_t cbuf_free(cbuf_handle_t c);
 CB_Status_t cbuf_reset(cbuf_handle_t c);
 CB_Status_t cbuf_put(cbuf_handle_t c, uint8_t *data, uint32_t length);
-CB_Status_t cbuf_get(cbuf_handle_t c, uint8_t **data, uint32_t length);
+CB_Status_t cbuf_get(cbuf_handle_t c, uint8_t *data, uint32_t length);
 CB_Status_t cbuf_peek(cbuf_handle_t c, uint8_t *data, uint32_t offset);
 uint8_t cbuf_empty(cbuf_handle_t c);
 uint8_t cbuf_full(cbuf_handle_t c);
