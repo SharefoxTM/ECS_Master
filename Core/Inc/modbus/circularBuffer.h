@@ -29,17 +29,6 @@ typedef struct circular_buf_t {
 
 typedef circular_buf_t *cbuf_handle_t;
 
-<<<<<<< HEAD
-cbuf_handle_t circular_buf_init(uint8_t *buffer, size_t size);
-CB_Status_t circular_buf_free(cbuf_handle_t c);
-CB_Status_t circular_buf_reset(cbuf_handle_t c);
-CB_Status_t circular_buf_put(cbuf_handle_t c, uint8_t *data, uint32_t length);
-CB_Status_t circular_buf_get(cbuf_handle_t c, uint8_t **data, uint32_t length);
-uint8_t circular_buf_empty(cbuf_handle_t c);
-uint8_t circular_buf_full(cbuf_handle_t c);
-uint32_t circular_buf_capacity(cbuf_handle_t c);
-uint32_t circular_buf_size(cbuf_handle_t c);
-=======
 cbuf_handle_t cbuf_init(uint8_t *buffer, size_t size);
 CB_Status_t cbuf_free(cbuf_handle_t c);
 CB_Status_t cbuf_reset(cbuf_handle_t c);
@@ -50,6 +39,5 @@ uint8_t cbuf_empty(cbuf_handle_t c);
 uint8_t cbuf_full(cbuf_handle_t c);
 uint32_t cbuf_capacity(cbuf_handle_t c);
 uint32_t cbuf_size(cbuf_handle_t c);
->>>>>>> cbd943e3b46e968db4e522fc6d4ee095b25451de
 
 #endif
