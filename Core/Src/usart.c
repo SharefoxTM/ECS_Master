@@ -27,8 +27,6 @@
 #include <string.h>
 
 // Modbus_CircularBuffer_t Modbus_CircularBuffer;
-uint8_t pData[256];
-cbuf_handle_t hcbuf;
 
 /* USER CODE END 0 */
 
@@ -234,11 +232,11 @@ void printSplashScreen(void) {
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t size) {
   if (huart->Instance == USART1) {
     CB_Status_t err;
-    err = circular_buf_put(hcbuf, pData, size);
+    err = cbuf_put(hcbuf_modbus, MODBUS_DMA_RXData, size);
     if (err != CB_OK) {
       LOG_ERROR("Circular buffer put error: %d", err);
     }
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, pData, 256);
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, MODBUS_DMA_RXData, 256);
   }
 }
 
