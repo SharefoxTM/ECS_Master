@@ -144,16 +144,17 @@ void gpio_getUserInput(void) {
 }
 
 void mainInput(Screen_t *scr, ButtonMask btn) {
-  if (btn & (BTN_DOWN | BTN_UP) && scr->child != NULL) {
+  if(btn & (BTN_DOWN | BTN_UP) && scr->child != NULL) {
     // Handle vertical if allowed
     handleVerticalInput(scr, btn);
+  }
 
-  } else if ((scr->allowedButtons & (BTN_RIGHT | BTN_LEFT))) {
+  if ((scr->allowedButtons & (BTN_RIGHT | BTN_LEFT)) && (btn & (BTN_RIGHT | BTN_LEFT))) {
     // Handle horizontal if allowed
     handleHorizontalInput(scr, btn);
-    handleVerticalSelector(scr, btn);
-
-  } else if (btn & BTN_ENTER && scr->child != NULL) {
+  } 
+  
+  if (btn & BTN_ENTER && scr->child != NULL) {
     uint8_t location;
     location = screen_getVerticalSelectorLocation();
     Screen_t *child = screen_getChildAtIndex(scr, location);

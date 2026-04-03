@@ -2,6 +2,11 @@
 #include "TCP/cJSON.h"
 #include "TCP/tcp_server.h"
 #include "TCP/tcp_typedefs.h"
+#include "modbus/modbus.h"
+#include "modbus/modbus_conf.h"
+#include "stm32f1xx_hal_def.h"
+#include <stdint.h>
+#include <string.h>
 
 tcp_server_error_t parse_init(struct tcp_pcb *newpcb, cJSON *data);
 tcp_server_error_t parse_led(struct tcp_pcb *newpcb, cJSON *data);
@@ -65,15 +70,37 @@ tcp_server_error_t parse_request(struct tcp_pcb *newpcb, struct pbuf *p) {
  */
 tcp_server_error_t parse_init(struct tcp_pcb *newpcb, cJSON *data) {
   tcp_server_error_t err = TCP_SERVER_ERR_VAL;
-  if (cJSON_IsObject(data)) {
-    cJSON *resp = cJSON_CreateObject();
-    // TODO: implement init logic here
-    if (err == TCP_SERVER_ERR_OK) {
-      cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
-      cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
-      cJSON_AddItemToObject(resp, "data", data);
-      err = tcp_server_send_response(newpcb, resp);
+  if (cJSON_IsArray(data)) {
+    for (uint8_t i = 0; i < cJSON_GetArraySize(data); i++) {
+      cJSON *item = cJSON_GetArrayItem(data, i);
+      if (!cJSON_IsObject(item)) {
+        LOG_ERROR("Invalid item format in init action\r");
+        return err;
+      }
+      if (!cJSON_HasObjectItem(item, "row") || !cJSON_HasObjectItem(item, "data")) {
+        LOG_ERROR("Missing row or data field in init action\r");
+        return err;
+      }
+      if (!cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(item, "row")) || !cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(item, "data"))) {
+        LOG_ERROR("Invalid data format for row or data in init action\r");
+        return err;
+      }
+      uint8_t row = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(item, "row"));
+      uint64_t value = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(item, "data"));
+
+      if(Modbus_InitSlave(row, (uint8_t *)(&value), sizeof(uint64_t)) != HAL_OK) {
+        LOG_ERROR("Failed to initialize slave at row %d with value %llu\r", row, value);
+        return err;
+      }
     }
+
+    cJSON *resp = cJSON_CreateObject();
+
+    cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
+    cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
+    cJSON_AddItemToObject(resp, "data", data);
+    err = tcp_server_send_response(newpcb, resp);
+    
 
     cJSON_Delete(resp);
   }
@@ -89,14 +116,29 @@ tcp_server_error_t parse_init(struct tcp_pcb *newpcb, cJSON *data) {
  */
 tcp_server_error_t parse_led(struct tcp_pcb *newpcb, cJSON *data) {
   tcp_server_error_t err = TCP_SERVER_ERR_VAL;
-  // TODO: implement LED control logic here
-  cJSON *resp = cJSON_CreateObject();
-  if (err == TCP_SERVER_ERR_OK) {
-    cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("led"));
-    cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
-    cJSON_AddItemToObject(resp, "data", data);
-    err = tcp_server_send_response(newpcb, resp);
+  LEDMode_t led;
+  if(!cJSON_IsString(data) || (data->valuestring == NULL)) {
+    return err;
   }
+  if(strcmp(cJSON_GetStringValue(data), "OFF") == 0) {
+    led = LEDMODE_OFF;
+  } else if(strcmp(cJSON_GetStringValue(data), "KR") == 0) {
+    led = LEDMODE_KR;
+  } else if(strcmp(cJSON_GetStringValue(data), "VEGAS") == 0) {
+    led = LEDMODE_VEGAS;
+  } else {
+    led = LEDMODE_ON;
+  }
+  
+  Modbus_ChangeLedMode(MODBUS_SLAVE_BROADCAST, led);
+  err = TCP_SERVER_ERR_OK;
+  
+  cJSON *resp = cJSON_CreateObject();
+
+  cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("led"));
+  cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
+  cJSON_AddItemToObject(resp, "data", data);
+  err = tcp_server_send_response(newpcb, resp);
 
   cJSON_Delete(resp);
   return TCP_SERVER_ERR_OK;

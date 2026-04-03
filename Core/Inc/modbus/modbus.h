@@ -22,5 +22,6 @@ HAL_StatusTypeDef Modbus_ChangeLedMode(uint8_t address, LEDMode_t mode);
 HAL_StatusTypeDef Modbus_StoreReel(uint8_t width);
 HAL_StatusTypeDef Modbus_RetrieveReel(uint8_t address, uint8_t position,
                                       uint8_t width);
+HAL_StatusTypeDef Modbus_InitSlave(uint8_t address, uint8_t *registerValues, uint8_t numRegisters);
 
 #endif // MODBUS_H
