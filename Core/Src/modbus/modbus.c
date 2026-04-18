@@ -140,6 +140,39 @@ HAL_StatusTypeDef Modbus_InitSlave(uint8_t address, uint8_t *registerValues, uin
   return HAL_UART_Transmit_DMA(&huart1, package, 8 + (numRegisters * 2));
 }
 
+HAL_StatusTypeDef Modbus_GetStatus(uint8_t address, uint64_t *status) {
+  uint8_t package[] = {address,
+                       MODBUS_FUNC_READ_INPUT_REGISTERS,
+                       0x00,
+                       0x00,
+                       0x00,
+                       0x01,
+                       0,
+                       0};
+
+  uint16_t crc = crc16(package, 6);
+  package[6] = crc & 0xFF; // CRC low byte
+  package[7] = crc >> 8;   // CRC high byte
+
+  if (HAL_UART_Transmit_DMA(&huart1, package, 8) != HAL_OK) {
+    return HAL_ERROR;
+  }
+
+  uint8_t rxBuffer[5];
+  if (HAL_UART_Receive(&huart1, rxBuffer, sizeof(rxBuffer), 1000) != HAL_OK) {
+    return HAL_ERROR;
+  }
+
+  if (rxBuffer[1] != MODBUS_FUNC_READ_INPUT_REGISTERS) {
+    return HAL_ERROR;
+  }
+  
+  for (uint16_t i = 0; i < rxBuffer[2]; i++) {
+    *status = (*status << 8) | rxBuffer[3 + i];
+  }
+  return HAL_OK;
+}
+
 ModbusError_t Modbus_parsePackage(cbuf_handle_t cb) {
   uint8_t slaveAddress, functionCode, coilAddress[2];
 

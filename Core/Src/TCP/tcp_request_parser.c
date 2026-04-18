@@ -153,8 +153,44 @@ tcp_server_error_t parse_led(struct tcp_pcb *newpcb, cJSON *data) {
  */
 tcp_server_error_t parse_take(struct tcp_pcb *newpcb, cJSON *data) {
   tcp_server_error_t err = TCP_SERVER_ERR_VAL;
+  uint8_t row, slot, width;
   cJSON *resp = cJSON_CreateObject();
-  // TODO: implement retrieve logic here
+
+  if(!cJSON_IsObject(data)) {
+    LOG_ERROR("Invalid data format for take action\r");
+    return err;
+  }
+  if(!cJSON_HasObjectItem(data, "row")) {
+    LOG_ERROR("Missing row field in take action\r");
+    return err;
+  }
+  if(!cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(data, "row"))) {
+    LOG_ERROR("Invalid data format for row in take action\r");
+    return err;
+  }
+  if(!cJSON_HasObjectItem(data, "slot")) {
+    LOG_ERROR("Missing slot field in take action\r");
+    return err;
+  }
+  if(!cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(data, "slot"))) {
+    LOG_ERROR("Invalid data format for slot in take action\r");
+    return err;
+  }
+  if(!cJSON_HasObjectItem(data, "width")) {
+    LOG_ERROR("Missing width field in take action\r");
+    return err;
+  }
+  if(!cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(data, "width"))) {
+    LOG_ERROR("Invalid data format for width in take action\r");
+    return err;
+  }
+
+  row = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, "row"));
+  slot = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, "slot"));
+  width = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, "width"));
+
+  err = Modbus_RetrieveReel(row, slot, width);
+
   if (err == TCP_SERVER_ERR_OK) {
     cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
     cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
@@ -163,7 +199,7 @@ tcp_server_error_t parse_take(struct tcp_pcb *newpcb, cJSON *data) {
   }
 
   cJSON_Delete(resp);
-  return TCP_SERVER_ERR_OK;
+  return err;
 }
 
 /**
@@ -176,7 +212,22 @@ tcp_server_error_t parse_take(struct tcp_pcb *newpcb, cJSON *data) {
 tcp_server_error_t parse_put(struct tcp_pcb *newpcb, cJSON *data) {
   tcp_server_error_t err = TCP_SERVER_ERR_VAL;
   cJSON *resp = cJSON_CreateObject();
-  // TODO: implement put logic here
+  uint8_t width;
+  if(!cJSON_IsObject(data)) {
+    LOG_ERROR("Invalid data format for put action\r");
+    return err;
+  }
+  if(!cJSON_HasObjectItem(data, "width")) {
+    LOG_ERROR("Missing width field in put action\r");
+    return err;
+  }
+  if(!cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(data, "width"))) {
+    LOG_ERROR("Invalid data format for width in put action\r");
+    return err;
+  }
+  width = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, "width"));
+  err = Modbus_StoreReel(width);
+
   if (err == TCP_SERVER_ERR_OK) {
     cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
     cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
@@ -185,7 +236,7 @@ tcp_server_error_t parse_put(struct tcp_pcb *newpcb, cJSON *data) {
   }
 
   cJSON_Delete(resp);
-  return TCP_SERVER_ERR_OK;
+  return err;
 }
 
 /**
@@ -198,7 +249,27 @@ tcp_server_error_t parse_put(struct tcp_pcb *newpcb, cJSON *data) {
 tcp_server_error_t parse_status(struct tcp_pcb *newpcb, cJSON *data) {
   tcp_server_error_t err = TCP_SERVER_ERR_VAL;
   cJSON *resp = cJSON_CreateObject();
-  // TODO: implement status logic here
+  uint8_t row;
+  uint64_t status;
+  if(!cJSON_IsObject(data)) {
+    LOG_ERROR("Invalid data format for status action\r");
+    return err;
+  }
+  if(!cJSON_HasObjectItem(data, "row")) {
+    LOG_ERROR("Missing row field in status action\r");
+    return err;
+  }
+  if(!cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(data, "row"))) {
+    LOG_ERROR("Invalid data format for row in status action\r");
+    return err;
+  }
+  row = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, "row"));
+
+  err = Modbus_GetStatus(row, &status);
+
+  cJSON *statusItem = cJSON_CreateNumber(status);
+  cJSON_AddItemToObject(data, "statusItem", statusItem);
+
   if (err == TCP_SERVER_ERR_OK) {
     cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
     cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_OK));
