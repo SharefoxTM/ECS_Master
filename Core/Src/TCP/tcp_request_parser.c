@@ -189,7 +189,7 @@ tcp_server_error_t parse_take(struct tcp_pcb *newpcb, cJSON *data) {
   slot = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, "slot"));
   width = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, "width"));
 
-  err = Modbus_RetrieveReel(row, slot, width);
+  err = (tcp_server_error_t) Modbus_RetrieveReel(row, slot, width);
 
   if (err == TCP_SERVER_ERR_OK) {
     cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
@@ -226,7 +226,7 @@ tcp_server_error_t parse_put(struct tcp_pcb *newpcb, cJSON *data) {
     return err;
   }
   width = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, "width"));
-  err = Modbus_StoreReel(width);
+  err = (tcp_server_error_t) Modbus_StoreReel(width);
 
   if (err == TCP_SERVER_ERR_OK) {
     cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("init"));
@@ -265,7 +265,7 @@ tcp_server_error_t parse_status(struct tcp_pcb *newpcb, cJSON *data) {
   }
   row = cJSON_GetNumberValue(cJSON_GetObjectItemCaseSensitive(data, "row"));
 
-  err = Modbus_GetStatus(row, &status);
+  err = (tcp_server_error_t) Modbus_GetStatus(row, &status);
 
   cJSON *statusItem = cJSON_CreateNumber(status);
   cJSON_AddItemToObject(data, "statusItem", statusItem);
