@@ -22,12 +22,16 @@
 #include "gpio.h"
 #include "SSD1803A/screens.h"
 #include "Utilities/log.h"
+#include <stdint.h>
+#include <string.h>
 
 /* USER CODE BEGIN 0 */
 void handleVerticalInput(Screen_t *scr, ButtonMask btn);
 void handleHorizontalInput(Screen_t *scr, ButtonMask btn);
 void handleVerticalSelector(Screen_t *scr, ButtonMask btn);
 ButtonMask prevBtn;
+uint8_t rowCounter = 1;
+
 /* USER CODE END 0 */
 
 /*----------------------------------------------------------------------------*/
@@ -137,13 +141,15 @@ void gpio_getUserInput(void) {
                                           : i == 3 ? "BTN_RIGHT"
                                                    : "BTN_ENTER"));
 #endif
-
-    currentScreen->handleInput(currentScreen, btn);
-  }
+    if (strcmp(currentScreen->name, "Slots") != 0) {
+      currentScreen->handleInput(currentScreen, btn, null);
+    } else {
+      currentScreen->handleInput(currentScreen, btn, rowCounter);
+    }
   prevBtn = btn;
 }
 
-void mainInput(Screen_t *scr, ButtonMask btn) {
+void mainInput(Screen_t *scr, ButtonMask btn, uint8_t optionalData) {
   if(btn & (BTN_DOWN | BTN_UP) && scr->child != NULL) {
     // Handle vertical if allowed
     handleVerticalInput(scr, btn);
@@ -165,7 +171,13 @@ void mainInput(Screen_t *scr, ButtonMask btn) {
   }
 }
 
-void nextPageInput(Screen_t *scr, ButtonMask btn) {}
+void rowStatusInput(Screen_t *scr, ButtonMask btn, uint8_t optionalData) {
+  if(btn & (BTN_DOWN | BTN_UP)) {
+    // Increment or decrement row number
+  }
+}
+
+void nextPageInput(Screen_t *scr, ButtonMask btn, uint8_t optionalData) {}
 
 void handleVerticalInput(Screen_t *scr, ButtonMask btn) {
   uint8_t location, borderTop = 0, borderBottom = 3;

@@ -49,7 +49,7 @@ typedef enum {
 } OptionMask;
 
 typedef void (*ScreenFn)(void);
-typedef void (*ScreenInputFn)(Screen_t *scr, ButtonMask btn);
+typedef void (*ScreenInputFn)(Screen_t *scr, ButtonMask btn, uint8_t optionalData);
 
 struct Screen {
   char name[12];
@@ -68,11 +68,13 @@ struct Screen {
 // screen functions
 void screen_init(void);
 void mainRender(void);
+void rowStatusRender(void);
 void nextPageRender(void);
 void setLights(void);
 
-void mainInput(Screen_t *scr, ButtonMask btn);
-void nextPageInput(Screen_t *scr, ButtonMask btn);
+void mainInput(Screen_t *scr, ButtonMask btn, uint8_t optionalData);
+void rowStatusInput(Screen_t *scr, ButtonMask btn, uint8_t optionalData);
+void nextPageInput(Screen_t *scr, ButtonMask btn, uint8_t optionalData);
 
 screen_selection_t get_currentScreen(void);
 void set_currentScreen(screen_selection_t screen);

@@ -57,8 +57,8 @@ Screen_t scrRows = {
 Screen_t scrSlots = {
     .name = "Slots",
     .allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
-    .handleInput = &mainInput,
-    .function = &mainRender,
+    .handleInput = &rowStatusInput,
+    .function = &rowStatusRender,
     .renderOptions = OPTIONS_PRINT_HEADER | OPTIONS_PRINT_ENTER_ICON,
 };
 
@@ -156,6 +156,39 @@ void mainRender(void) {
     SSD1803A_setCursor(3, 15);
     SSD1803A_writeCharacter(0x1C);
   }
+}
+
+void rowStatusRender(void) {
+  static uint8_t rowNumber = 1;
+  uint64_t tempNum;
+  SSD1803A_clr_screen();
+  LOG_VERBOSE("Rendering screen %s using row status render\r", currentScreen->name);
+  if (currentScreen->renderOptions & OPTIONS_PRINT_HEADER) {
+    LOG_DEBUG("Printing title\r");
+    render_title(currentScreen);
+  }
+  char temp[16];
+  sprintf(temp, "Row %d: ", rowNumber);
+  LOG_DEBUG("Rendering row status for row %d\r", rowNumber);
+  SSD1803A_setCursor(1, 0);
+  SSD1803A_write(temp);
+  SSD1803A_setCursor(2, 0);
+
+  if(Modbus_GetStatus(rowNumber, &tempNum) != HAL_OK) {
+    LOG_ERROR("Failed to get status for row %d\r", rowNumber);
+    sprintf(temp, "Row unavailable");
+    SSD1803A_write(temp);
+    return;
+  }
+
+  for (int i = 0; i < 40; i++) {
+    if (tempNum & (1 << i)) {
+      SSD1803A_writeNumber(1);
+    } else {
+      SSD1803A_writeNumber(0);
+    }
+  }
+
 }
 
 void nextPageRender(void) {
