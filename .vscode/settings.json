@@ -14,11 +14,16 @@
 	],
 	"editor.formatOnSave": true,
 	"[c]": {
-		"editor.defaultFormatter": "STMicroelectronics.stm32cube-ide-clangd"
+		"editor.defaultFormatter": "xaver.clang-format"
 	},
 	"[cpp]": {
-		"editor.defaultFormatter": "STMicroelectronics.stm32cube-ide-clangd"
+		"editor.defaultFormatter": "xaver.clang-format"
 	},
 	"C_Cpp.clang_format_fallbackStyle": "file",
-	"clang-format.style": "file"
+	"clang-format.style": "file",
+	"clang-format.executable": "C:\\Program Files\\LLVM\\bin\\clang-format.exe",
+	"editor.defaultFormatter": null,
+	"[jsonc]": {
+		"editor.defaultFormatter": "vscode.json-language-features"
+	}
 }

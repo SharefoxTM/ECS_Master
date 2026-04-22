@@ -23,16 +23,8 @@ AllowShortLambdasOnASingleLine: false
 BinPackArguments: true
 BinPackParameters: true
 
-# --- Braces ---
-BreakBeforeBraces: Custom
-BraceWrapping:
-  AfterInitializerList: true
-  AfterStruct: true
-  BreakAfterBrace: true    # ← forces .name onto next line
-AllowShortBracedListsOnASingleLine: false
 
 Cpp11BracedListStyle: false
-AllowShortBracedListsOnASingleLine: false
 
 # --- Spacing rules ---
 SpaceBeforeParens: ControlStatements
