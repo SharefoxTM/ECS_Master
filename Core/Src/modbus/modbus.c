@@ -4,6 +4,7 @@
 #include "stm32f1xx_hal_uart.h"
 #include "usart.h"
 #include <stdint.h>
+#include <string.h>
 
 uint8_t totalSlaves;
 cbuf_handle_t hcbuf_modbus;
@@ -13,13 +14,18 @@ uint8_t MODBUS_DMA_RXData[256];
 uint8_t findSlaves(void);
 uint8_t findIndexForAddress(uint8_t address);
 
+static HAL_StatusTypeDef Modbus_TransmitBlocking(const uint8_t *data, uint16_t len, uint32_t timeout);
+static HAL_StatusTypeDef Modbus_TransmitDMA(const uint8_t *data, uint16_t len);
+
+static uint8_t modbusTxDMABuffer[256];
+
 void initRegisters(void);
 void findAvailableSlot(uint8_t *address, uint16_t *slot, uint8_t width);
 void holdSlot(uint8_t address, uint16_t slot, uint8_t width);
 void releaseSlot(uint8_t address, uint16_t slot, uint8_t width);
 
 ModbusError_t Modbus_init(void) {
-	uint8_t pdata[256] = { 0 };
+	static uint8_t pdata[256] = { 0 };
 	hcbuf_modbus = cbuf_init(pdata, 256);
 	if (hcbuf_modbus == NULL) {
 		return MODBUS_ERROR_INIT;
@@ -37,7 +43,35 @@ ModbusError_t Modbus_init(void) {
 
 	// Start Receiver DMA Interrupts
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart1, MODBUS_DMA_RXData, 256);
+	__HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
 	return MODBUS_OK;
+}
+
+static HAL_StatusTypeDef Modbus_TransmitBlocking(const uint8_t *data, uint16_t len, uint32_t timeout) {
+	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin; // Set DE pin high
+	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, (uint8_t *)data, len, timeout);
+	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin << 16; // Set DE pin low
+	return status;
+}
+
+static HAL_StatusTypeDef Modbus_TransmitDMA(const uint8_t *data, uint16_t len) {
+	if (len > sizeof(modbusTxDMABuffer)) {
+		return HAL_ERROR;
+	}
+
+	if (huart1.gState != HAL_UART_STATE_READY) {
+		return HAL_BUSY;
+	}
+
+	memcpy(modbusTxDMABuffer, data, len);
+	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin; // Set DE pin high
+
+	HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(&huart1, modbusTxDMABuffer, len);
+	if (status != HAL_OK) {
+		USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin << 16; // Set DE pin low
+	}
+
+	return status;
 }
 
 HAL_StatusTypeDef Modbus_ChangeLedMode(uint8_t address, LEDMode_t mode) {
@@ -45,8 +79,8 @@ HAL_StatusTypeDef Modbus_ChangeLedMode(uint8_t address, LEDMode_t mode) {
 												MODBUS_FUNC_WRITE_SINGLE_REGISTER,
 												(uint8_t)(MODBUS_MODULE_LEDMODE_ADDRESS >> 8),
 												(uint8_t)(MODBUS_MODULE_LEDMODE_ADDRESS & 0xFF),
-												(uint8_t)((uint16_t)mode >> 8),
-												(uint8_t)((uint16_t)mode & 0xFF),
+												0,
+												mode,
 												0,
 												0 };
 
@@ -57,7 +91,7 @@ HAL_StatusTypeDef Modbus_ChangeLedMode(uint8_t address, LEDMode_t mode) {
 	package[6] = crc & 0xFF; // CRC low byte
 	package[7] = crc >> 8;	 // CRC high byte
 
-	return HAL_UART_Transmit_DMA(&huart1, package, 8);
+	return Modbus_TransmitDMA(package, 8);
 }
 
 HAL_StatusTypeDef Modbus_StoreReel(uint8_t width) {
@@ -88,7 +122,7 @@ HAL_StatusTypeDef Modbus_StoreReel(uint8_t width) {
 	package[8] = crc & 0xFF; // CRC low byte
 	package[9] = crc >> 8;	 // CRC high byte
 
-	return HAL_UART_Transmit_DMA(&huart1, package, 10);
+	return Modbus_TransmitDMA(package, 10);
 }
 
 HAL_StatusTypeDef Modbus_RetrieveReel(uint8_t address, uint8_t slot, uint8_t width) {
@@ -104,9 +138,10 @@ HAL_StatusTypeDef Modbus_RetrieveReel(uint8_t address, uint8_t slot, uint8_t wid
 	package[8] = crc & 0xFF; // CRC low byte
 	package[9] = crc >> 8;	 // CRC high byte
 
+	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin; // Set DE pin high
 	releaseSlot(address, slot, width);
 
-	return HAL_UART_Transmit_DMA(&huart1, package, 8);
+	return Modbus_TransmitDMA(package, 8);
 }
 
 HAL_StatusTypeDef Modbus_InitSlave(uint8_t address, uint8_t *registerValues, uint8_t numRegisters) {
@@ -127,17 +162,17 @@ HAL_StatusTypeDef Modbus_InitSlave(uint8_t address, uint8_t *registerValues, uin
 	package[6 + (numRegisters * 2)] = crc & 0xFF; // CRC low byte
 	package[7 + (numRegisters * 2)] = crc >> 8;		// CRC high byte
 
-	return HAL_UART_Transmit_DMA(&huart1, package, 8 + (numRegisters * 2));
+	return Modbus_TransmitDMA(package, 8 + (numRegisters * 2));
 }
 
 HAL_StatusTypeDef Modbus_GetStatus(uint8_t address, uint64_t *status) {
-	uint8_t package[] = { address, MODBUS_FUNC_READ_INPUT_REGISTERS, 0x00, 0x00, 0x00, 0x01, 0, 0 };
+	uint8_t package[] = { address, MODBUS_FUNC_READ_INPUT_REGISTERS, 0x00, 0x02, 0x00, 0x01, 0, 0 };
 
 	uint16_t crc = crc16(package, 6);
 	package[6] = crc & 0xFF; // CRC low byte
 	package[7] = crc >> 8;	 // CRC high byte
 
-	if (HAL_UART_Transmit_DMA(&huart1, package, 8) != HAL_OK) {
+	if (Modbus_TransmitDMA(package, 8) != HAL_OK) {
 		return HAL_ERROR;
 	}
 
@@ -229,22 +264,62 @@ ModbusError_t Modbus_handleWriteSingleRegisterResponse(uint8_t *rxFrame) {
 	// TODO: Implement write single register response handling
 	return MODBUS_OK;
 }
+HAL_StatusTypeDef Modbus_GetRowCoilsStatus(uint8_t address, uint32_t timeout, uint8_t *coilStatus) {
+	uint16_t len = Slaves[findIndexForAddress(address)].InputRegisters[MODBUS_FREE_SLOTS_OFFSET];
+	uint8_t package[] = { address, MODBUS_FUNC_READ_COILS, 0x00, 0x00, (uint8_t)(len >> 8), (uint8_t)(len & 0xFF), 0, 0 };
+
+	uint16_t crc = crc16(package, 6);
+	package[6] = crc & 0xFF; // CRC low byte
+	package[7] = crc >> 8;	 // CRC high byte
+
+	if (Modbus_TransmitDMA(package, 8) != HAL_OK) {
+		return HAL_ERROR;
+	}
+
+	uint8_t rxBuffer[256];
+	if (HAL_UART_Receive(&huart1, rxBuffer, sizeof(rxBuffer), timeout) != HAL_OK) {
+		return HAL_ERROR;
+	}
+
+	if (rxBuffer[1] != MODBUS_FUNC_READ_COILS) {
+		return HAL_ERROR;
+	}
+
+	// Process coil status from rxBuffer[3] onwards based on byte count in rxBuffer[2]
+	for (uint8_t i = 0; i < rxBuffer[2]; i++) {
+		coilStatus[i] = rxBuffer[3 + i];
+	}
+	return HAL_OK;
+}
 
 uint8_t findSlaves(void) {
+	LOG_DEBUG("Scanning for Modbus slaves...\r");
 	uint8_t slaveCount = 0;
 	for (uint8_t i = 1; i <= 16; i++) {
-		uint8_t Tx[] = { i, MODBUS_FUNC_READ_INPUT_REGISTERS, 0x00, 0x02, 0x00, 0x03, 0, 0 };
-		uint8_t Rx[11];
+		uint8_t Tx[] = { i, MODBUS_FUNC_READ_INPUT_REGISTERS, 0x00, 0x00, 0x00, 0x03, 0, 0 };
+		uint8_t Rx[11] = { 0 };
 		uint16_t crc = crc16(Tx, 6);
 		Tx[6] = crc & 0xFF; // CRC low byte
 		Tx[7] = crc >> 8;		// CRC high byte
-		HAL_UART_Transmit(&huart1, Tx, 8, 1000);
-		if (HAL_UART_Receive(&huart1, Rx, 11, 1000) == HAL_OK) {
-			Slaves[slaveCount].address = i;
-			Slaves[slaveCount].InputRegisters[0] = Rx[3] << 8 | Rx[4];	 // Total slots
-			Slaves[slaveCount].InputRegisters[1] = Rx[5] << 8 | Rx[6];	 // Free slots
-			Slaves[slaveCount++].InputRegisters[2] = Rx[7] << 8 | Rx[8]; // Status
+
+		if (Modbus_TransmitBlocking(Tx, 8, 1000) != HAL_OK) {
+			LOG_DEBUG("TX failed for address %d\r", i);
 		}
+
+		if (HAL_UART_Receive(&huart1, Rx, sizeof(Rx), 1000) == HAL_TIMEOUT) {
+			LOG_DEBUG("No response from address %d\r", i);
+			continue;
+		}
+
+		if (Rx[0] != i) {
+			LOG_DEBUG("Unexpected address in response. expected=%d got=%d\r", i, Rx[0]);
+			continue;
+		}
+		LOG_DEBUG("Found slave at address %d\r", i);
+		Slaves[slaveCount].address = i;
+		Slaves[slaveCount].InputRegisters[0] = Rx[3] << 8 | Rx[4];	 // Total slots
+		Slaves[slaveCount].InputRegisters[1] = Rx[5] << 8 | Rx[6];	 // Free slots
+		Slaves[slaveCount++].InputRegisters[2] = Rx[7] << 8 | Rx[8]; // Status
 	}
 	return slaveCount;
 }
@@ -275,7 +350,7 @@ void initRegisters(void) {
 		uint16_t crc = crc16(Tx, 6);
 		Tx[6] = crc & 0xFF; // CRC low byte
 		Tx[7] = crc >> 8;		// CRC high byte
-		HAL_UART_Transmit(&huart1, Tx, 8, 1000);
+		Modbus_TransmitBlocking(Tx, 8, 1000);
 		HAL_UART_Receive(&huart1, RxHR, RxRegistersSize, 1000);
 		for (uint8_t i = 0; i < RxHR[2]; i += 2) {
 			Slaves[j].HoldingRegisters[i / 2] = RxHR[3 + i] << 8 | RxHR[4 + i];
@@ -288,7 +363,7 @@ void initRegisters(void) {
 		crc = crc16(Tx, 6);
 		Tx[6] = crc & 0xFF; // CRC low byte
 		Tx[7] = crc >> 8;		// CRC high byte
-		HAL_UART_Transmit(&huart1, Tx, 8, 1000);
+		Modbus_TransmitBlocking(Tx, 8, 1000);
 		HAL_UART_Receive(&huart1, Rx, RxSize, 1000);
 		for (uint8_t i = 0; i < Rx[2]; i++) {
 			Slaves[j].Coils[i] = Rx[3 + i];
@@ -332,5 +407,17 @@ void holdSlot(uint8_t address, uint16_t slot, uint8_t width) {
 void releaseSlot(uint8_t address, uint16_t slot, uint8_t width) {
 	for (uint8_t i = 0; i < width; i++) {
 		Slaves[address].Coils[(slot + i) / 8] &= ~(1 << ((slot + i) % 8));
+	}
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+	if (huart->Instance == USART1) {
+		HAL_GPIO_WritePin(USART1_DE_GPIO_Port, USART1_DE_Pin, GPIO_PIN_RESET);
+	}
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+	if (huart->Instance == USART1) {
+		HAL_GPIO_WritePin(USART1_DE_GPIO_Port, USART1_DE_Pin, GPIO_PIN_RESET);
 	}
 }

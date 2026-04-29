@@ -189,7 +189,7 @@ void rowStatusInput(Screen_t *scr, ButtonMask btn, void *arg) {
 	if (btn & BTN_ENTER) {
 		if (screen_getHorizontalSelectorLocation() == 0) {
 			uint64_t tempNum;
-			if (Modbus_GetStatus(rowCounter, &tempNum) != HAL_OK) {
+			if (Modbus_GetRowCoilsStatus(rowCounter, 1000, (uint8_t *)&tempNum) != HAL_OK) {
 				LOG_ERROR("Failed to get status for row %d\r", rowCounter);
 				SSD1803A_setCursor(2, 0);
 				SSD1803A_write("Row unavailable");

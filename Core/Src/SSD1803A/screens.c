@@ -167,7 +167,7 @@ void rowStatusRender(void) {
 	}
 	LOG_DEBUG("Rendering row status for row %d\r", rowCounter);
 	screen_updateRowStatusNumber(rowCounter);
-	if (Modbus_GetStatus(rowCounter, &tempNum) != HAL_OK) {
+	if (Modbus_GetRowCoilsStatus(rowCounter, 1000, (uint8_t *)&tempNum) != HAL_OK) {
 		LOG_ERROR("Failed to get status for row %d\r", rowCounter);
 		SSD1803A_setCursor(2, 0);
 		SSD1803A_write("Row unavailable");
