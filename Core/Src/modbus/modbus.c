@@ -16,6 +16,11 @@ uint8_t findIndexForAddress(uint8_t address);
 
 static HAL_StatusTypeDef Modbus_TransmitBlocking(const uint8_t *data, uint16_t len, uint32_t timeout);
 static HAL_StatusTypeDef Modbus_TransmitDMA(const uint8_t *data, uint16_t len);
+static void Modbus_DrainRx(uint32_t timeoutMs);
+static uint8_t Modbus_ReadScanResponse(uint8_t expectedAddress, uint8_t *payloadOut, uint16_t payloadOutSize);
+static HAL_StatusTypeDef Modbus_ReadResponsePayload(uint8_t expectedAddress, uint8_t expectedFunction,
+																										uint8_t *payloadOut, uint16_t payloadOutSize,
+																										uint8_t *payloadLenOut, uint32_t timeout);
 
 static uint8_t modbusTxDMABuffer[256];
 
@@ -72,6 +77,120 @@ static HAL_StatusTypeDef Modbus_TransmitDMA(const uint8_t *data, uint16_t len) {
 	}
 
 	return status;
+}
+
+static void Modbus_DrainRx(uint32_t timeoutMs) {
+	uint8_t dummy;
+	while (HAL_UART_Receive(&huart1, &dummy, 1, timeoutMs) == HAL_OK) {
+	}
+}
+
+static uint8_t Modbus_ReadScanResponse(uint8_t expectedAddress, uint8_t *payloadOut, uint16_t payloadOutSize) {
+	uint8_t header[3] = { 0 };
+	uint8_t payload[64] = { 0 };
+	uint8_t isValidSlaveResponse = 0;
+
+	HAL_StatusTypeDef headerStatus = HAL_UART_Receive(&huart1, header, sizeof(header), 1000);
+	if (headerStatus != HAL_OK) {
+		LOG_DEBUG("No response from address %d\r", expectedAddress);
+	} else if (header[0] != expectedAddress) {
+		LOG_DEBUG("Unexpected address in response. expected=%d got=%d\r", expectedAddress, header[0]);
+	} else if (header[1] == (MODBUS_FUNC_READ_INPUT_REGISTERS | MODBUS_ERROR_RESPONSE_MASK)) {
+		if (HAL_UART_Receive(&huart1, payload, 2, 1000) == HAL_OK) {
+			LOG_DEBUG("Slave %d exception code: %02x\r", expectedAddress, header[2]);
+		}
+	} else if (header[1] != MODBUS_FUNC_READ_INPUT_REGISTERS) {
+		LOG_DEBUG("Unexpected function for address %d: %02x\r", expectedAddress, header[1]);
+	} else if (header[2] > 6) {
+		LOG_DEBUG("Unexpected byte count for address %d: %d\r", expectedAddress, header[2]);
+	} else {
+		uint16_t bytesToRead = (uint16_t)header[2] + 2; // Data + CRC
+		if (bytesToRead > sizeof(payload)) {
+			LOG_DEBUG("Response too long from address %d: %d\r", expectedAddress, bytesToRead);
+		} else if (HAL_UART_Receive(&huart1, payload, bytesToRead, 1000) != HAL_OK) {
+			LOG_DEBUG("Incomplete response from address %d\r", expectedAddress);
+		} else {
+			uint8_t rxFrame[70] = { 0 };
+			rxFrame[0] = header[0];
+			rxFrame[1] = header[1];
+			rxFrame[2] = header[2];
+			memcpy(&rxFrame[3], payload, bytesToRead);
+
+			uint16_t rxCrc = (uint16_t)payload[header[2]] | ((uint16_t)payload[header[2] + 1] << 8);
+			uint16_t calcCrc = crc16(rxFrame, (uint16_t)(3 + header[2]));
+			if (rxCrc != calcCrc) {
+				LOG_DEBUG("CRC mismatch from address %d\r", expectedAddress);
+			} else if (header[2] < 6) {
+				LOG_DEBUG("Not enough data bytes from address %d\r", expectedAddress);
+			} else if (payloadOutSize < 6) {
+				LOG_DEBUG("Output payload buffer too small for address %d\r", expectedAddress);
+			} else {
+				memcpy(payloadOut, payload, 6);
+				isValidSlaveResponse = 1;
+			}
+		}
+	}
+
+	return isValidSlaveResponse;
+}
+
+static HAL_StatusTypeDef Modbus_ReadResponsePayload(uint8_t expectedAddress, uint8_t expectedFunction,
+																										uint8_t *payloadOut, uint16_t payloadOutSize,
+																										uint8_t *payloadLenOut, uint32_t timeout) {
+	uint8_t header[3] = { 0 };
+	uint8_t frameNoCrc[259] = { 0 };
+	uint16_t bytesToRead;
+
+	if (payloadOut == NULL || payloadLenOut == NULL) {
+		return HAL_ERROR;
+	}
+
+	if (HAL_UART_Receive(&huart1, header, sizeof(header), timeout) != HAL_OK) {
+		return HAL_ERROR;
+	}
+
+	if (header[0] != expectedAddress) {
+		return HAL_ERROR;
+	}
+
+	if (header[1] == (expectedFunction | MODBUS_ERROR_RESPONSE_MASK)) {
+		uint8_t exceptionTail[2] = { 0 };
+		(void)HAL_UART_Receive(&huart1, exceptionTail, sizeof(exceptionTail), timeout);
+		return HAL_ERROR;
+	}
+
+	if (header[1] != expectedFunction) {
+		return HAL_ERROR;
+	}
+
+	if (header[2] > payloadOutSize) {
+		return HAL_ERROR;
+	}
+
+	bytesToRead = (uint16_t)header[2] + 2; // Data + CRC
+	if (bytesToRead > 256) {
+		return HAL_ERROR;
+	}
+
+	uint8_t rxBuffer[256] = { 0 };
+	if (HAL_UART_Receive(&huart1, rxBuffer, bytesToRead, timeout) != HAL_OK) {
+		return HAL_ERROR;
+	}
+
+	frameNoCrc[0] = header[0];
+	frameNoCrc[1] = header[1];
+	frameNoCrc[2] = header[2];
+	memcpy(&frameNoCrc[3], rxBuffer, header[2]);
+
+	uint16_t rxCrc = (uint16_t)rxBuffer[header[2]] | ((uint16_t)rxBuffer[header[2] + 1] << 8);
+	if (crc16(frameNoCrc, (uint16_t)(3 + header[2])) != rxCrc) {
+		return HAL_ERROR;
+	}
+
+	memcpy(payloadOut, rxBuffer, header[2]);
+	*payloadLenOut = header[2];
+
+	return HAL_OK;
 }
 
 HAL_StatusTypeDef Modbus_ChangeLedMode(uint8_t address, LEDMode_t mode) {
@@ -141,7 +260,7 @@ HAL_StatusTypeDef Modbus_RetrieveReel(uint8_t address, uint8_t slot, uint8_t wid
 	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin; // Set DE pin high
 	releaseSlot(address, slot, width);
 
-	return Modbus_TransmitDMA(package, 8);
+	return Modbus_TransmitDMA(package, 10);
 }
 
 HAL_StatusTypeDef Modbus_InitSlave(uint8_t address, uint8_t *registerValues, uint8_t numRegisters) {
@@ -176,18 +295,22 @@ HAL_StatusTypeDef Modbus_GetStatus(uint8_t address, uint64_t *status) {
 		return HAL_ERROR;
 	}
 
-	uint8_t rxBuffer[5];
-	if (HAL_UART_Receive(&huart1, rxBuffer, sizeof(rxBuffer), 1000) != HAL_OK) {
+	uint8_t payload[8] = { 0 };
+	uint8_t payloadLen = 0;
+	if (Modbus_ReadResponsePayload(address, MODBUS_FUNC_READ_INPUT_REGISTERS, payload, sizeof(payload), &payloadLen,
+																 1000) != HAL_OK) {
 		return HAL_ERROR;
 	}
 
-	if (rxBuffer[1] != MODBUS_FUNC_READ_INPUT_REGISTERS) {
+	if (payloadLen != 2) {
 		return HAL_ERROR;
 	}
 
-	for (uint16_t i = 0; i < rxBuffer[2]; i++) {
-		*status = (*status << 8) | rxBuffer[3 + i];
+	*status = 0;
+	for (uint16_t i = 0; i < payloadLen; i++) {
+		*status = (*status << 8) | payload[i];
 	}
+
 	return HAL_OK;
 }
 
@@ -276,18 +399,15 @@ HAL_StatusTypeDef Modbus_GetRowCoilsStatus(uint8_t address, uint32_t timeout, ui
 		return HAL_ERROR;
 	}
 
-	uint8_t rxBuffer[256];
-	if (HAL_UART_Receive(&huart1, rxBuffer, sizeof(rxBuffer), timeout) != HAL_OK) {
+	uint8_t payloadLen = 0;
+	uint8_t payload[256] = { 0 };
+	if (Modbus_ReadResponsePayload(address, MODBUS_FUNC_READ_COILS, payload, sizeof(payload), &payloadLen, timeout) !=
+			HAL_OK) {
 		return HAL_ERROR;
 	}
 
-	if (rxBuffer[1] != MODBUS_FUNC_READ_COILS) {
-		return HAL_ERROR;
-	}
-
-	// Process coil status from rxBuffer[3] onwards based on byte count in rxBuffer[2]
-	for (uint8_t i = 0; i < rxBuffer[2]; i++) {
-		coilStatus[i] = rxBuffer[3 + i];
+	for (uint8_t i = 0; i < payloadLen; i++) {
+		coilStatus[i] = payload[i];
 	}
 	return HAL_OK;
 }
@@ -297,29 +417,27 @@ uint8_t findSlaves(void) {
 	uint8_t slaveCount = 0;
 	for (uint8_t i = 1; i <= 16; i++) {
 		uint8_t Tx[] = { i, MODBUS_FUNC_READ_INPUT_REGISTERS, 0x00, 0x00, 0x00, 0x03, 0, 0 };
-		uint8_t Rx[11] = { 0 };
+		uint8_t payload[6] = { 0 };
 		uint16_t crc = crc16(Tx, 6);
 		Tx[6] = crc & 0xFF; // CRC low byte
 		Tx[7] = crc >> 8;		// CRC high byte
 
-		if (Modbus_TransmitBlocking(Tx, 8, 1000) != HAL_OK) {
+		Modbus_DrainRx(2);
+
+		HAL_StatusTypeDef txStatus = Modbus_TransmitBlocking(Tx, 8, 1000);
+		if (txStatus != HAL_OK) {
 			LOG_DEBUG("TX failed for address %d\r", i);
+		} else {
+			uint8_t isValidSlaveResponse = Modbus_ReadScanResponse(i, payload, sizeof(payload));
+			if (isValidSlaveResponse) {
+				LOG_DEBUG("Found slave at address %d\r", i);
+				Slaves[slaveCount].address = i;
+				Slaves[slaveCount].InputRegisters[0] = (uint16_t)payload[0] << 8 | payload[1];	 // Total slots
+				Slaves[slaveCount].InputRegisters[1] = (uint16_t)payload[2] << 8 | payload[3];	 // Free slots
+				Slaves[slaveCount++].InputRegisters[2] = (uint16_t)payload[4] << 8 | payload[5]; // Status
+				HAL_Delay(2);
+			}
 		}
-
-		if (HAL_UART_Receive(&huart1, Rx, sizeof(Rx), 1000) == HAL_TIMEOUT) {
-			LOG_DEBUG("No response from address %d\r", i);
-			continue;
-		}
-
-		if (Rx[0] != i) {
-			LOG_DEBUG("Unexpected address in response. expected=%d got=%d\r", i, Rx[0]);
-			continue;
-		}
-		LOG_DEBUG("Found slave at address %d\r", i);
-		Slaves[slaveCount].address = i;
-		Slaves[slaveCount].InputRegisters[0] = Rx[3] << 8 | Rx[4];	 // Total slots
-		Slaves[slaveCount].InputRegisters[1] = Rx[5] << 8 | Rx[6];	 // Free slots
-		Slaves[slaveCount++].InputRegisters[2] = Rx[7] << 8 | Rx[8]; // Status
 	}
 	return slaveCount;
 }
