@@ -2,6 +2,7 @@
 #include "SSD1803A/SSD1803A_driver.h"
 #include "Utilities/log.h"
 #include "modbus/modbus.h"
+#include "modbus/modbus_conf.h"
 #include "stm32f1xx_hal.h"
 #include <stdint.h>
 #include <string.h>
@@ -167,7 +168,7 @@ void rowStatusRender(void) {
 	}
 	LOG_DEBUG("Rendering row status for row %d\r", rowCounter);
 	screen_updateRowStatusNumber(rowCounter);
-	if (Modbus_GetRowCoilsStatus(rowCounter, 1000, (uint8_t *)&tempNum) != HAL_OK) {
+	if (Modbus_GetRowCoilsStatus(rowCounter, 10000, (uint8_t *)&tempNum) != HAL_OK) {
 		LOG_ERROR("Failed to get status for row %d\r", rowCounter);
 		SSD1803A_setCursor(2, 0);
 		SSD1803A_write("Row unavailable");
@@ -207,12 +208,19 @@ void screen_updateRowStatusNumber(uint8_t row) {
 
 void screen_updateRowStatusData(uint64_t data) {
 	SSD1803A_setCursor(2, 0);
-	for (int i = 0; i < 40; i++) {
-		if (data & (1 << i)) {
-			SSD1803A_writeNumber(1);
-		} else {
-			SSD1803A_writeNumber(0);
+	uint8_t count;
+	if ((HAL_StatusTypeDef)Modbus_getSlaveCoilCount(rowCounter, &count) == HAL_OK) {
+		LOG_DEBUG("Row %d has %d coils\r", rowCounter, count);
+		for (int i = 0; i < count; i++) {
+			if (data & (1 << i)) {
+				SSD1803A_writeNumber(1);
+			} else {
+				SSD1803A_writeNumber(0);
+			}
 		}
+	} else {
+		LOG_ERROR("Failed to get coil count for row %d\r", rowCounter);
+		count = 0;
 	}
 }
 

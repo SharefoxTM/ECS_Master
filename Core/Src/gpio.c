@@ -20,13 +20,11 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "gpio.h"
-#include "SSD1803A/screens.h"
-#include "Utilities/log.h"
-#include "modbus/modbus.h"
-#include <stdint.h>
-#include <string.h>
 
 /* USER CODE BEGIN 0 */
+#include "Utilities/log.h"
+#include "modbus/modbus.h"
+
 void handleVerticalInput(Screen_t *scr, ButtonMask btn);
 void handleHorizontalInput(Screen_t *scr, ButtonMask btn);
 void handleVerticalSelector(Screen_t *scr, ButtonMask btn);
@@ -69,7 +67,7 @@ void MX_GPIO_Init(void) {
 	GPIO_InitStruct.Pin = USART1_DE_Pin;
 	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_MEDIUM;
 	HAL_GPIO_Init(USART1_DE_GPIO_Port, &GPIO_InitStruct);
 
 	/*Configure GPIO pin : BUTTON_ENTER_Pin */
@@ -189,7 +187,7 @@ void rowStatusInput(Screen_t *scr, ButtonMask btn, void *arg) {
 	if (btn & BTN_ENTER) {
 		if (screen_getHorizontalSelectorLocation() == 0) {
 			uint64_t tempNum;
-			if (Modbus_GetRowCoilsStatus(rowCounter, 1000, (uint8_t *)&tempNum) != HAL_OK) {
+			if (Modbus_GetRowCoilsStatus(rowCounter, 4000, (uint8_t *)&tempNum) != HAL_OK) {
 				LOG_ERROR("Failed to get status for row %d\r", rowCounter);
 				SSD1803A_setCursor(2, 0);
 				SSD1803A_write("Row unavailable");

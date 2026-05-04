@@ -52,3 +52,4 @@ void printSplashScreen(void);
 #endif
 
 #endif /* __USART_H__ */
+
