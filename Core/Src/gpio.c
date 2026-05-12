@@ -76,11 +76,11 @@ void MX_GPIO_Init(void) {
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
 	HAL_GPIO_Init(BUTTON_ENTER_GPIO_Port, &GPIO_InitStruct);
 
-	/*Configure GPIO pins : BUTTON_RIGHT_Pin BUTTON_LEFT_Pin */
-	GPIO_InitStruct.Pin = BUTTON_RIGHT_Pin | BUTTON_LEFT_Pin;
+	/*Configure GPIO pin : BUTTON_LEFT_Pin */
+	GPIO_InitStruct.Pin = BUTTON_LEFT_Pin | BUTTON_RIGHT_Pin;
 	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
 	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+	HAL_GPIO_Init(BUTTON_LEFT_GPIO_Port, &GPIO_InitStruct);
 
 	/*Configure GPIO pin : BUTTON_DOWN_Pin */
 	GPIO_InitStruct.Pin = BUTTON_DOWN_Pin;
@@ -187,7 +187,7 @@ void rowStatusInput(Screen_t *scr, ButtonMask btn, void *arg) {
 	if (btn & BTN_ENTER) {
 		if (screen_getHorizontalSelectorLocation() == 0) {
 			uint64_t tempNum;
-			if (Modbus_GetRowCoilsStatus(rowCounter, 4000, (uint8_t *)&tempNum) != HAL_OK) {
+			if (Modbus_GetRowCoilsStatus(rowCounter, MODBUS_RX_TIMEOUT_MS, (uint8_t *)&tempNum) != HAL_OK) {
 				LOG_ERROR("Failed to get status for row %d\r", rowCounter);
 				SSD1803A_setCursor(2, 0);
 				SSD1803A_write("Row unavailable");

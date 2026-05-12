@@ -58,22 +58,22 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define USART1_DE_Pin GPIO_PIN_8
-#define USART1_DE_GPIO_Port GPIOA
-#define BUTTON_ENTER_Pin GPIO_PIN_15
+#define USART1_DE_Pin					 GPIO_PIN_8
+#define USART1_DE_GPIO_Port		 GPIOA
+#define BUTTON_ENTER_Pin			 GPIO_PIN_15
 #define BUTTON_ENTER_GPIO_Port GPIOA
-#define BUTTON_RIGHT_Pin GPIO_PIN_11
-#define BUTTON_RIGHT_GPIO_Port GPIOC
-#define BUTTON_LEFT_Pin GPIO_PIN_12
-#define BUTTON_LEFT_GPIO_Port GPIOC
-#define BUTTON_DOWN_Pin GPIO_PIN_2
-#define BUTTON_DOWN_GPIO_Port GPIOD
-#define BUTTON_UP_Pin GPIO_PIN_3
-#define BUTTON_UP_GPIO_Port GPIOB
-#define SCREEN_RST_Pin GPIO_PIN_5
-#define SCREEN_RST_GPIO_Port GPIOB
+#define BUTTON_LEFT_Pin				 GPIO_PIN_12
+#define BUTTON_LEFT_GPIO_Port	 GPIOC
+#define BUTTON_DOWN_Pin				 GPIO_PIN_2
+#define BUTTON_DOWN_GPIO_Port	 GPIOD
+#define BUTTON_UP_Pin					 GPIO_PIN_3
+#define BUTTON_UP_GPIO_Port		 GPIOB
+#define SCREEN_RST_Pin				 GPIO_PIN_5
+#define SCREEN_RST_GPIO_Port	 GPIOB
 
 /* USER CODE BEGIN Private defines */
+#define BUTTON_RIGHT_Pin			 GPIO_PIN_11
+#define BUTTON_RIGHT_GPIO_Port GPIOC
 
 /* USER CODE END Private defines */
 

@@ -11,28 +11,27 @@
 uint8_t totalSlaves;
 cbuf_handle_t hcbuf_modbus;
 ModbusSlave_t Slaves[MODBUS_MAX_SLAVES];
-uint8_t MODBUS_DMA_RXData[256];
+uint8_t modbusRxDMABuffer[256];
+uint8_t modbusTxDMABuffer[256];
 
 uint8_t findSlaves(void);
 uint8_t findIndexForAddress(uint8_t address);
+uint8_t pauseRxDMA(void);
+uint8_t readScanResponse(uint8_t expectedAddress, uint8_t *payloadOut, uint16_t payloadOutSize);
 
-static HAL_StatusTypeDef Modbus_TransmitBlocking(const uint8_t *data, uint16_t len, uint32_t timeout);
-static HAL_StatusTypeDef Modbus_TransmitDMA(const uint8_t *data, uint16_t len);
-static HAL_StatusTypeDef Modbus_WaitForTxComplete(uint32_t timeoutMs);
-static uint8_t Modbus_PauseRxDMA(void);
-static void Modbus_ResumeRxDMA(uint8_t wasPaused);
-static void Modbus_DrainRx(uint32_t timeoutMs);
-static uint8_t Modbus_ReadScanResponse(uint8_t expectedAddress, uint8_t *payloadOut, uint16_t payloadOutSize);
-static HAL_StatusTypeDef Modbus_ReadResponsePayload(uint8_t expectedAddress, uint8_t expectedFunction,
-																										uint8_t *payloadOut, uint16_t payloadOutSize,
-																										uint8_t *payloadLenOut, uint32_t timeout);
-
-static uint8_t modbusTxDMABuffer[256];
+HAL_StatusTypeDef transmitBlocking(const uint8_t *data, uint16_t len, uint32_t timeout);
+HAL_StatusTypeDef transmitDMA(const uint8_t *data, uint16_t len);
+HAL_StatusTypeDef waitForTxComplete(uint32_t timeoutMs);
+HAL_StatusTypeDef readResponsePayload(uint8_t expectedAddress, uint8_t expectedFunction, uint8_t *payloadOut,
+																			uint16_t payloadOutSize, uint8_t *payloadLenOut, uint32_t timeout);
 
 void initRegisters(void);
 void findAvailableSlot(uint8_t *address, uint16_t *slot, uint8_t width);
 void holdSlot(uint8_t address, uint16_t slot, uint8_t width);
 void releaseSlot(uint8_t address, uint16_t slot, uint8_t width);
+void resumeRxDMA(uint8_t wasPaused);
+void drainRx(uint32_t timeoutMs);
+void appendCrc16(uint8_t *data, uint16_t offset);
 
 ModbusError_t Modbus_init(void) {
 	static uint8_t pdata[256] = { 0 };
@@ -52,231 +51,9 @@ ModbusError_t Modbus_init(void) {
 	initRegisters();
 
 	// Start Receiver DMA Interrupts
-	HAL_UARTEx_ReceiveToIdle_DMA(&huart1, MODBUS_DMA_RXData, 256);
+	HAL_UARTEx_ReceiveToIdle_DMA(&huart1, modbusRxDMABuffer, 256);
 	__HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
 	return MODBUS_OK;
-}
-
-static HAL_StatusTypeDef Modbus_TransmitBlocking(const uint8_t *data, uint16_t len, uint32_t timeout) {
-	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin; // Set DE pin high
-	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, (uint8_t *)data, len, timeout);
-	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin << 16; // Set DE pin low
-	return status;
-}
-
-static HAL_StatusTypeDef Modbus_TransmitDMA(const uint8_t *data, uint16_t len) {
-	if (len > sizeof(modbusTxDMABuffer)) {
-		return HAL_ERROR;
-	}
-
-	if (huart1.gState != HAL_UART_STATE_READY) {
-		return HAL_BUSY;
-	}
-
-	memcpy(modbusTxDMABuffer, data, len);
-	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin; // Set DE pin high
-
-	HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(&huart1, modbusTxDMABuffer, len);
-	if (status != HAL_OK) {
-		USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin << 16; // Set DE pin low
-	}
-
-	return status;
-}
-
-static HAL_StatusTypeDef Modbus_WaitForTxComplete(uint32_t timeoutMs) {
-	uint32_t tickStart = HAL_GetTick();
-
-	while (huart1.gState != HAL_UART_STATE_READY) {
-		if ((HAL_GetTick() - tickStart) >= timeoutMs) {
-			return HAL_TIMEOUT;
-		}
-	}
-
-	return HAL_OK;
-}
-
-static uint8_t Modbus_PauseRxDMA(void) {
-	if (huart1.RxState == HAL_UART_STATE_READY) {
-		return 0;
-	}
-
-	if (HAL_UART_DMAStop(&huart1) == HAL_OK) {
-		return 1;
-	}
-
-	return 0;
-}
-
-static void Modbus_ResumeRxDMA(uint8_t wasPaused) {
-	if (!wasPaused) {
-		return;
-	}
-
-	if (HAL_UARTEx_ReceiveToIdle_DMA(&huart1, MODBUS_DMA_RXData, sizeof(MODBUS_DMA_RXData)) == HAL_OK) {
-		__HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
-	}
-}
-
-static void Modbus_DrainRx(uint32_t timeoutMs) {
-	uint8_t dummy;
-	while (HAL_UART_Receive(&huart1, &dummy, 1, timeoutMs) == HAL_OK) {
-	}
-}
-
-static uint8_t Modbus_ReadScanResponse(uint8_t expectedAddress, uint8_t *payloadOut, uint16_t payloadOutSize) {
-	uint8_t header[3] = { 0 };
-	uint8_t payload[64] = { 0 };
-	uint8_t isValidSlaveResponse = 0;
-	uint8_t wasRxDmaPaused = Modbus_PauseRxDMA();
-
-	HAL_StatusTypeDef headerStatus = HAL_UART_Receive(&huart1, header, sizeof(header), 2000);
-	if (headerStatus != HAL_OK) {
-		if (headerStatus == HAL_BUSY) {
-			LOG_DEBUG("UART busy while reading response header from address %d\r", expectedAddress);
-		} else {
-			LOG_DEBUG("No response from address %d\r", expectedAddress);
-		}
-	} else if (header[0] != expectedAddress) {
-		LOG_DEBUG("Unexpected address in response. expected=%d got=%d\r", expectedAddress, header[0]);
-	} else if (header[1] == (MODBUS_FUNC_READ_INPUT_REGISTERS | MODBUS_ERROR_RESPONSE_MASK)) {
-		if (HAL_UART_Receive(&huart1, payload, 2, 1000) == HAL_OK) {
-			LOG_DEBUG("Slave %d exception code: %02x\r", expectedAddress, header[2]);
-		}
-	} else if (header[1] != MODBUS_FUNC_READ_INPUT_REGISTERS) {
-		LOG_DEBUG("Unexpected function for address %d: %02x\r", expectedAddress, header[1]);
-	} else if (header[2] > 6) {
-		LOG_DEBUG("Unexpected byte count for address %d: %d\r", expectedAddress, header[2]);
-	} else {
-		uint16_t bytesToRead = (uint16_t)header[2] + 2; // Data + CRC
-		if (bytesToRead > sizeof(payload)) {
-			LOG_DEBUG("Response too long from address %d: %d\r", expectedAddress, bytesToRead);
-		} else if (HAL_UART_Receive(&huart1, payload, bytesToRead, 1000) != HAL_OK) {
-			LOG_DEBUG("Incomplete response from address %d\r", expectedAddress);
-		} else {
-			uint8_t rxFrame[70] = { 0 };
-			rxFrame[0] = header[0];
-			rxFrame[1] = header[1];
-			rxFrame[2] = header[2];
-			memcpy(&rxFrame[3], payload, bytesToRead);
-
-			uint16_t rxCrc = (uint16_t)payload[header[2]] | ((uint16_t)payload[header[2] + 1] << 8);
-			uint16_t calcCrc = crc16(rxFrame, (uint16_t)(3 + header[2]));
-			if (rxCrc != calcCrc) {
-				LOG_DEBUG("CRC mismatch from address %d\r", expectedAddress);
-			} else if (header[2] < 6) {
-				LOG_DEBUG("Not enough data bytes from address %d\r", expectedAddress);
-			} else if (payloadOutSize < 6) {
-				LOG_DEBUG("Output payload buffer too small for address %d\r", expectedAddress);
-			} else {
-				memcpy(payloadOut, payload, 6);
-				isValidSlaveResponse = 1;
-			}
-		}
-	}
-
-	Modbus_ResumeRxDMA(wasRxDmaPaused);
-
-	return isValidSlaveResponse;
-}
-
-static HAL_StatusTypeDef Modbus_ReadResponsePayload(uint8_t expectedAddress, uint8_t expectedFunction,
-																										uint8_t *payloadOut, uint16_t payloadOutSize,
-																										uint8_t *payloadLenOut, uint32_t timeout) {
-	uint8_t header[3] = { 0 };
-	uint8_t frameNoCrc[259] = { 0 };
-	uint16_t bytesToRead;
-	HAL_StatusTypeDef status = HAL_ERROR;
-	uint8_t wasRxDmaPaused;
-
-	if (payloadOut == NULL || payloadLenOut == NULL) {
-		return HAL_ERROR;
-	}
-
-	// HAL_UART_DMAStop used by Modbus_PauseRxDMA also stops TX DMA, so wait for TX completion first.
-	if (Modbus_WaitForTxComplete(timeout) != HAL_OK) {
-		LOG_DEBUG("Timed out waiting for TX completion before reading response from address %d\r", expectedAddress);
-		return HAL_BUSY;
-	}
-
-	wasRxDmaPaused = Modbus_PauseRxDMA();
-
-	HAL_StatusTypeDef headerStatus = HAL_UART_Receive(&huart1, header, sizeof(header), timeout);
-	if (headerStatus != HAL_OK) {
-		if (headerStatus == HAL_BUSY) {
-			LOG_DEBUG("UART busy while reading response header from address %d\r", expectedAddress);
-		}
-		LOG_DEBUG("No response from address %d\r", expectedAddress);
-		Modbus_ResumeRxDMA(wasRxDmaPaused);
-		return headerStatus;
-	}
-
-	if (header[0] != expectedAddress) {
-		LOG_ERROR("Unexpected address in response. expected=%d got=%d\r", expectedAddress, header[0]);
-		Modbus_ResumeRxDMA(wasRxDmaPaused);
-		return HAL_ERROR;
-	}
-
-	if (header[1] == (expectedFunction | MODBUS_ERROR_RESPONSE_MASK)) {
-		LOG_DEBUG("Received exception response from address %d, code: %02x\r", expectedAddress, header[2]);
-		uint8_t exceptionTail[2] = { 0 };
-		HAL_UART_Receive(&huart1, exceptionTail, sizeof(exceptionTail), timeout);
-		Modbus_ResumeRxDMA(wasRxDmaPaused);
-		return HAL_ERROR;
-	}
-
-	if (header[1] != expectedFunction) {
-		LOG_DEBUG("Unexpected function for address %d: %02x\r", expectedAddress, header[1]);
-		Modbus_ResumeRxDMA(wasRxDmaPaused);
-		return HAL_ERROR;
-	}
-
-	if (header[2] > payloadOutSize) {
-		LOG_DEBUG("Response too long for address %d: %d\r", expectedAddress, header[2]);
-		Modbus_ResumeRxDMA(wasRxDmaPaused);
-		return HAL_ERROR;
-	}
-
-	bytesToRead = (uint16_t)header[2] + 2; // Data + CRC
-	if (bytesToRead > 256) {
-		Modbus_ResumeRxDMA(wasRxDmaPaused);
-		return HAL_ERROR;
-	}
-
-	uint8_t rxBuffer[256] = { 0 };
-	HAL_StatusTypeDef payloadStatus = HAL_UART_Receive(&huart1, rxBuffer, bytesToRead, timeout);
-	if (payloadStatus != HAL_OK) {
-		if (payloadStatus == HAL_BUSY) {
-			LOG_DEBUG("UART busy while reading payload from address %d\r", expectedAddress);
-		}
-		Modbus_ResumeRxDMA(wasRxDmaPaused);
-		return HAL_ERROR;
-	}
-
-	frameNoCrc[0] = header[0];
-	frameNoCrc[1] = header[1];
-	frameNoCrc[2] = header[2];
-	memcpy(&frameNoCrc[3], rxBuffer, header[2]);
-
-	uint16_t rxCrc = (uint16_t)rxBuffer[header[2]] | ((uint16_t)rxBuffer[header[2] + 1] << 8);
-	if (crc16(frameNoCrc, (uint16_t)(3 + header[2])) != rxCrc) {
-		LOG_DEBUG("CRC mismatch from address %d\r", expectedAddress);
-		Modbus_ResumeRxDMA(wasRxDmaPaused);
-		return HAL_ERROR;
-	}
-	LOG_DEBUG("Received valid response from address %d\r", expectedAddress);
-#ifdef LOG_LEVEL_VERBOSE
-	LOG_VERBOSE("Response data:");
-	for (uint8_t i = 0; i < header[2]; i++) {
-		LOG_VERBOSE(" %02x", rxBuffer[i]);
-	}
-#endif
-	memcpy(payloadOut, rxBuffer, header[2]);
-	*payloadLenOut = header[2];
-	status = HAL_OK;
-
-	Modbus_ResumeRxDMA(wasRxDmaPaused);
-	return status;
 }
 
 HAL_StatusTypeDef Modbus_ChangeLedMode(uint8_t address, LEDMode_t mode) {
@@ -296,7 +73,7 @@ HAL_StatusTypeDef Modbus_ChangeLedMode(uint8_t address, LEDMode_t mode) {
 	package[6] = crc & 0xFF; // CRC low byte
 	package[7] = crc >> 8;	 // CRC high byte
 
-	return Modbus_TransmitDMA(package, 8);
+	return transmitDMA(package, 8);
 }
 
 HAL_StatusTypeDef Modbus_StoreReel(uint8_t width) {
@@ -327,7 +104,7 @@ HAL_StatusTypeDef Modbus_StoreReel(uint8_t width) {
 	package[8] = crc & 0xFF; // CRC low byte
 	package[9] = crc >> 8;	 // CRC high byte
 
-	return Modbus_TransmitDMA(package, 10);
+	return transmitDMA(package, 10);
 }
 
 HAL_StatusTypeDef Modbus_RetrieveReel(uint8_t address, uint8_t slot, uint8_t width) {
@@ -346,7 +123,7 @@ HAL_StatusTypeDef Modbus_RetrieveReel(uint8_t address, uint8_t slot, uint8_t wid
 	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin; // Set DE pin high
 	releaseSlot(address, slot, width);
 
-	return Modbus_TransmitDMA(package, 10);
+	return transmitDMA(package, 10);
 }
 
 HAL_StatusTypeDef Modbus_InitSlave(uint8_t address, uint8_t *registerValues, uint8_t numRegisters) {
@@ -367,7 +144,7 @@ HAL_StatusTypeDef Modbus_InitSlave(uint8_t address, uint8_t *registerValues, uin
 	package[6 + (numRegisters * 2)] = crc & 0xFF; // CRC low byte
 	package[7 + (numRegisters * 2)] = crc >> 8;		// CRC high byte
 
-	return Modbus_TransmitDMA(package, 8 + (numRegisters * 2));
+	return transmitDMA(package, 8 + (numRegisters * 2));
 }
 
 HAL_StatusTypeDef Modbus_GetStatus(uint8_t address, uint64_t *status) {
@@ -377,14 +154,14 @@ HAL_StatusTypeDef Modbus_GetStatus(uint8_t address, uint64_t *status) {
 	package[6] = crc & 0xFF; // CRC low byte
 	package[7] = crc >> 8;	 // CRC high byte
 
-	if (Modbus_TransmitDMA(package, 8) != HAL_OK) {
+	if (transmitDMA(package, 8) != HAL_OK) {
 		return HAL_ERROR;
 	}
 
 	uint8_t payload[8] = { 0 };
 	uint8_t payloadLen = 0;
-	if (Modbus_ReadResponsePayload(address, MODBUS_FUNC_READ_INPUT_REGISTERS, payload, sizeof(payload), &payloadLen,
-																 1000) != HAL_OK) {
+	if (readResponsePayload(address, MODBUS_FUNC_READ_INPUT_REGISTERS, payload, sizeof(payload), &payloadLen, 1000) !=
+			HAL_OK) {
 		return HAL_ERROR;
 	}
 
@@ -498,7 +275,7 @@ HAL_StatusTypeDef Modbus_GetRowCoilsStatus(uint8_t address, uint32_t timeout, ui
 	LOG_VERBOSE("Waiting for response... Timeout: %lu ms\r", timeout);
 #endif
 
-	if (Modbus_TransmitDMA(package, 8) != HAL_OK) {
+	if (transmitDMA(package, 8) != HAL_OK) {
 		LOG_ERROR("Failed to send request for row %d\r", address);
 		return HAL_ERROR;
 	}
@@ -507,8 +284,8 @@ HAL_StatusTypeDef Modbus_GetRowCoilsStatus(uint8_t address, uint32_t timeout, ui
 	uint8_t payloadLen = 0;
 	uint8_t payload[256] = { 0 };
 
-	if (Modbus_ReadResponsePayload(address, MODBUS_FUNC_READ_DISCRETE_INPUTS, payload, sizeof(payload), &payloadLen,
-																 timeout) != HAL_OK) {
+	if (readResponsePayload(address, MODBUS_FUNC_READ_DISCRETE_INPUTS, payload, sizeof(payload), &payloadLen, timeout) !=
+			HAL_OK) {
 		LOG_ERROR("Failed to read response for row %d\r", address);
 		return HAL_ERROR;
 	}
@@ -517,6 +294,18 @@ HAL_StatusTypeDef Modbus_GetRowCoilsStatus(uint8_t address, uint32_t timeout, ui
 		coilStatus[i] = payload[i];
 	}
 	return HAL_OK;
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+	if (huart->Instance == USART1) {
+		USART1_DE_GPIO_Port->BRR = USART1_DE_Pin;
+	}
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+	if (huart->Instance == USART1) {
+		USART1_DE_GPIO_Port->BRR = USART1_DE_Pin;
+	}
 }
 
 uint8_t findSlaves(void) {
@@ -529,21 +318,22 @@ uint8_t findSlaves(void) {
 		Tx[6] = crc & 0xFF; // CRC low byte
 		Tx[7] = crc >> 8;		// CRC high byte
 
-		Modbus_DrainRx(2);
+		drainRx(2);
 
-		HAL_StatusTypeDef txStatus = Modbus_TransmitBlocking(Tx, 8, 1000);
-		if (txStatus != HAL_OK) {
+		if (transmitBlocking(Tx, 8, MODBUS_RX_TIMEOUT_MS) != HAL_OK) {
 			LOG_DEBUG("TX failed for address %d\r", i);
 		} else {
-			uint8_t isValidSlaveResponse = Modbus_ReadScanResponse(i, payload, sizeof(payload));
+			uint8_t isValidSlaveResponse = readScanResponse(i, payload, sizeof(payload));
 			if (isValidSlaveResponse) {
 				LOG_DEBUG("Found slave at address %d\r", i);
 				LOG_DEBUG("  Total slots: %d\r", (payload[0] << 8) | payload[1]);
 				LOG_DEBUG("  Free slots: %d\r", (payload[2] << 8) | payload[3]);
 				LOG_DEBUG("  Status: 0x%02x\r", (payload[4] << 8) | payload[5]);
+#ifdef LOG_LEVEL_VERBOSE
 				for (int j = 0; j < 6; j++) {
-					LOG_DEBUG("    Register %f: 0x%02x\r", (float)j / 2, payload[j]);
+					LOG_VERBOSE("    Register %f: 0x%02x\r", (float)j / 2, payload[j]);
 				}
+#endif
 				Slaves[slaveCount].address = i;
 				Slaves[slaveCount].InputRegisters[0] = (uint16_t)payload[0] << 8 | payload[1];	 // Total slots
 				Slaves[slaveCount].InputRegisters[1] = (uint16_t)payload[2] << 8 | payload[3];	 // Free slots
@@ -564,8 +354,213 @@ uint8_t findIndexForAddress(uint8_t address) {
 	return 0xFF; // Address not found
 }
 
+uint8_t pauseRxDMA(void) {
+	if (huart1.RxState == HAL_UART_STATE_READY) {
+		return 0;
+	}
+
+	if (HAL_UART_DMAStop(&huart1) == HAL_OK) {
+		return 1;
+	}
+
+	return 0;
+}
+
+uint8_t readScanResponse(uint8_t expectedAddress, uint8_t *payloadOut, uint16_t payloadOutSize) {
+	uint8_t header[3] = { 0 };
+	uint8_t payload[64] = { 0 };
+	uint8_t isValidSlaveResponse = 0;
+	uint8_t wasRxDmaPaused = pauseRxDMA();
+
+	HAL_StatusTypeDef headerStatus = HAL_UART_Receive(&huart1, header, sizeof(header), 2000);
+	if (headerStatus != HAL_OK) {
+		if (headerStatus == HAL_BUSY) {
+			LOG_DEBUG("UART busy while reading response header from address %d\r", expectedAddress);
+		} else {
+			LOG_DEBUG("No response from address %d\r", expectedAddress);
+		}
+	} else if (header[0] != expectedAddress) {
+		LOG_DEBUG("Unexpected address in response. expected=%d got=%d\r", expectedAddress, header[0]);
+	} else if (header[1] == (MODBUS_FUNC_READ_INPUT_REGISTERS | MODBUS_ERROR_RESPONSE_MASK)) {
+		if (HAL_UART_Receive(&huart1, payload, 2, 1000) == HAL_OK) {
+			LOG_DEBUG("Slave %d exception code: %02x\r", expectedAddress, header[2]);
+		}
+	} else if (header[1] != MODBUS_FUNC_READ_INPUT_REGISTERS) {
+		LOG_DEBUG("Unexpected function for address %d: %02x\r", expectedAddress, header[1]);
+	} else if (header[2] > 6) {
+		LOG_DEBUG("Unexpected byte count for address %d: %d\r", expectedAddress, header[2]);
+	} else {
+		uint16_t bytesToRead = (uint16_t)header[2] + 2; // Data + CRC
+		if (bytesToRead > sizeof(payload)) {
+			LOG_DEBUG("Response too long from address %d: %d\r", expectedAddress, bytesToRead);
+		} else if (HAL_UART_Receive(&huart1, payload, bytesToRead, 1000) != HAL_OK) {
+			LOG_DEBUG("Incomplete response from address %d\r", expectedAddress);
+		} else {
+			uint8_t rxFrame[70] = { 0 };
+			rxFrame[0] = header[0];
+			rxFrame[1] = header[1];
+			rxFrame[2] = header[2];
+			memcpy(&rxFrame[3], payload, bytesToRead);
+
+			uint16_t rxCrc = (uint16_t)payload[header[2]] | ((uint16_t)payload[header[2] + 1] << 8);
+			uint16_t calcCrc = crc16(rxFrame, (uint16_t)(3 + header[2]));
+			if (rxCrc != calcCrc) {
+				LOG_DEBUG("CRC mismatch from address %d\r", expectedAddress);
+			} else if (header[2] < 6) {
+				LOG_DEBUG("Not enough data bytes from address %d\r", expectedAddress);
+			} else if (payloadOutSize < 6) {
+				LOG_DEBUG("Output payload buffer too small for address %d\r", expectedAddress);
+			} else {
+				memcpy(payloadOut, payload, 6);
+				isValidSlaveResponse = 1;
+			}
+		}
+	}
+
+	resumeRxDMA(wasRxDmaPaused);
+
+	return isValidSlaveResponse;
+}
+
+HAL_StatusTypeDef transmitBlocking(const uint8_t *data, uint16_t len, uint32_t timeout) {
+	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin; // Set DE pin high
+	HAL_StatusTypeDef status = HAL_UART_Transmit(&huart1, (uint8_t *)data, len, timeout);
+	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin << 16; // Set DE pin low
+	return status;
+}
+
+HAL_StatusTypeDef transmitDMA(const uint8_t *data, uint16_t len) {
+	if (len > sizeof(modbusTxDMABuffer)) {
+		return HAL_ERROR;
+	}
+
+	if (huart1.gState != HAL_UART_STATE_READY) {
+		return HAL_BUSY;
+	}
+
+	memcpy(modbusTxDMABuffer, data, len);
+	USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin; // Set DE pin high
+
+	HAL_StatusTypeDef status = HAL_UART_Transmit_DMA(&huart1, modbusTxDMABuffer, len);
+	if (status != HAL_OK) {
+		USART1_DE_GPIO_Port->BSRR = USART1_DE_Pin << 16; // Set DE pin low
+	}
+
+	return status;
+}
+
+HAL_StatusTypeDef waitForTxComplete(uint32_t timeoutMs) {
+	uint32_t tickStart = HAL_GetTick();
+
+	while (huart1.gState != HAL_UART_STATE_READY) {
+		if ((HAL_GetTick() - tickStart) >= timeoutMs) {
+			return HAL_TIMEOUT;
+		}
+	}
+
+	return HAL_OK;
+}
+
+HAL_StatusTypeDef readResponsePayload(uint8_t expectedAddress, uint8_t expectedFunction, uint8_t *payloadOut,
+																			uint16_t payloadOutSize, uint8_t *payloadLenOut, uint32_t timeout) {
+	uint8_t header[3] = { 0 };
+	uint8_t frameNoCrc[259] = { 0 };
+	uint16_t bytesToRead;
+	HAL_StatusTypeDef status = HAL_ERROR;
+	uint8_t wasRxDmaPaused;
+
+	if (payloadOut == NULL || payloadLenOut == NULL) {
+		return HAL_ERROR;
+	}
+
+	// HAL_UART_DMAStop used by Modbus_PauseRxDMA also stops TX DMA, so wait for TX completion first.
+	if (waitForTxComplete(timeout) != HAL_OK) {
+		LOG_DEBUG("Timed out waiting for TX completion before reading response from address %d\r", expectedAddress);
+		return HAL_BUSY;
+	}
+
+	wasRxDmaPaused = pauseRxDMA();
+
+	HAL_StatusTypeDef headerStatus = HAL_UART_Receive(&huart1, header, sizeof(header), timeout);
+	if (headerStatus != HAL_OK) {
+		if (headerStatus == HAL_BUSY) {
+			LOG_DEBUG("UART busy while reading response header from address %d\r", expectedAddress);
+		}
+		LOG_DEBUG("No response from address %d\r", expectedAddress);
+		resumeRxDMA(wasRxDmaPaused);
+		return headerStatus;
+	}
+
+	if (header[0] != expectedAddress) {
+		LOG_ERROR("Unexpected address in response. expected=%d got=%d\r", expectedAddress, header[0]);
+		resumeRxDMA(wasRxDmaPaused);
+		return HAL_ERROR;
+	}
+
+	if (header[1] == (expectedFunction | MODBUS_ERROR_RESPONSE_MASK)) {
+		LOG_DEBUG("Received exception response from address %d, code: %02x\r", expectedAddress, header[2]);
+		uint8_t exceptionTail[2] = { 0 };
+		HAL_UART_Receive(&huart1, exceptionTail, sizeof(exceptionTail), timeout);
+		resumeRxDMA(wasRxDmaPaused);
+		return HAL_ERROR;
+	}
+
+	if (header[1] != expectedFunction) {
+		LOG_DEBUG("Unexpected function for address %d: %02x\r", expectedAddress, header[1]);
+		resumeRxDMA(wasRxDmaPaused);
+		return HAL_ERROR;
+	}
+
+	if (header[2] > payloadOutSize) {
+		LOG_DEBUG("Response too long for address %d: %d\r", expectedAddress, header[2]);
+		resumeRxDMA(wasRxDmaPaused);
+		return HAL_ERROR;
+	}
+
+	bytesToRead = (uint16_t)header[2] + 2; // Data + CRC
+	if (bytesToRead > 256) {
+		resumeRxDMA(wasRxDmaPaused);
+		return HAL_ERROR;
+	}
+
+	uint8_t rxBuffer[256] = { 0 };
+	HAL_StatusTypeDef payloadStatus = HAL_UART_Receive(&huart1, rxBuffer, bytesToRead, timeout);
+	if (payloadStatus != HAL_OK) {
+		if (payloadStatus == HAL_BUSY) {
+			LOG_DEBUG("UART busy while reading payload from address %d\r", expectedAddress);
+		}
+		resumeRxDMA(wasRxDmaPaused);
+		return HAL_ERROR;
+	}
+
+	frameNoCrc[0] = header[0];
+	frameNoCrc[1] = header[1];
+	frameNoCrc[2] = header[2];
+	memcpy(&frameNoCrc[3], rxBuffer, header[2]);
+
+	uint16_t rxCrc = (uint16_t)rxBuffer[header[2]] | ((uint16_t)rxBuffer[header[2] + 1] << 8);
+	if (crc16(frameNoCrc, (uint16_t)(3 + header[2])) != rxCrc) {
+		LOG_DEBUG("CRC mismatch from address %d\r", expectedAddress);
+		resumeRxDMA(wasRxDmaPaused);
+		return HAL_ERROR;
+	}
+	LOG_DEBUG("Received valid response from address %d\r", expectedAddress);
+#ifdef LOG_LEVEL_VERBOSE
+	LOG_VERBOSE("Response data:");
+	for (uint8_t i = 0; i < header[2]; i++) {
+		LOG_VERBOSE(" %02x", rxBuffer[i]);
+	}
+#endif
+	memcpy(payloadOut, rxBuffer, header[2]);
+	*payloadLenOut = header[2];
+	status = HAL_OK;
+
+	resumeRxDMA(wasRxDmaPaused);
+	return status;
+}
+
 void initRegisters(void) {
-	uint8_t wasRxDmaPaused = Modbus_PauseRxDMA();
+	uint8_t wasRxDmaPaused = pauseRxDMA();
 
 	for (uint8_t j = 0; j < totalSlaves; j++) {
 		// Start copy holding registers
@@ -580,42 +575,31 @@ void initRegisters(void) {
 						RxRegistersSize = (Slaves[j].InputRegisters[0] * 2) + 4, RxSize = (Slaves[j].InputRegisters[0]) + 5;
 
 		uint8_t RxHR[RxRegistersSize], Rx[RxSize];
-		uint16_t crc = crc16(Tx, 6);
-		Tx[6] = crc & 0xFF; // CRC low byte
-		Tx[7] = crc >> 8;		// CRC high byte
-		if (Modbus_TransmitBlocking(Tx, 8, 1000) != HAL_OK) {
-			LOG_DEBUG("Failed to request holding registers from address %d\r", Slaves[j].address);
-			continue;
-		}
-		if (HAL_UART_Receive(&huart1, RxHR, RxRegistersSize, 1000) != HAL_OK) {
-			LOG_DEBUG("Failed to read holding registers from address %d\r", Slaves[j].address);
-			continue;
-		}
-		for (uint8_t i = 0; i < RxHR[2]; i += 2) {
-			Slaves[j].HoldingRegisters[i / 2] = RxHR[3 + i] << 8 | RxHR[4 + i];
-		}
-		// End copy holding registers
+		appendCrc16(Tx, 6);
+		if (transmitBlocking(Tx, 8, MODBUS_RX_TIMEOUT_MS) == HAL_OK &&
+				HAL_UART_Receive(&huart1, RxHR, RxRegistersSize, MODBUS_RX_TIMEOUT_MS) == HAL_OK) {
+			for (uint8_t i = 0; i < RxHR[2]; i += 2) {
+				Slaves[j].HoldingRegisters[i / 2] = RxHR[3 + i] << 8 | RxHR[4 + i];
+			}
+			// End copy holding registers
 
-		// Start copy coils
-		Tx[1] = MODBUS_FUNC_READ_COILS;
-		Tx[5] = 0x28;
-		crc = crc16(Tx, 6);
-		Tx[6] = crc & 0xFF; // CRC low byte
-		Tx[7] = crc >> 8;		// CRC high byte
-		if (Modbus_TransmitBlocking(Tx, 8, 1000) != HAL_OK) {
-			LOG_DEBUG("Failed to request coils from address %d\r", Slaves[j].address);
-			continue;
-		}
-		if (HAL_UART_Receive(&huart1, Rx, RxSize, 1000) != HAL_OK) {
-			LOG_DEBUG("Failed to read coils from address %d\r", Slaves[j].address);
-			continue;
-		}
-		for (uint8_t i = 0; i < Rx[2]; i++) {
-			Slaves[j].Coils[i] = Rx[3 + i];
+			// Start copy coils
+			Tx[1] = MODBUS_FUNC_READ_COILS;
+			Tx[5] = 0x28;
+			appendCrc16(Tx, 6);
+			if (transmitBlocking(Tx, 8, MODBUS_RX_TIMEOUT_MS) == HAL_OK &&
+					HAL_UART_Receive(&huart1, Rx, RxSize, MODBUS_RX_TIMEOUT_MS) == HAL_OK) {
+				for (uint8_t i = 0; i < Rx[2]; i++) {
+					Slaves[j].Coils[i] = Rx[3 + i];
+				}
+			} else {
+				LOG_DEBUG("Failed to read coils from address %d\r", Slaves[j].address);
+			}
+		} else {
+			LOG_DEBUG("Failed to request holding registers from address %d\r", Slaves[j].address);
 		}
 	}
-
-	Modbus_ResumeRxDMA(wasRxDmaPaused);
+	resumeRxDMA(wasRxDmaPaused);
 }
 
 void findAvailableSlot(uint8_t *address, uint16_t *slot, uint8_t width) {
@@ -657,14 +641,24 @@ void releaseSlot(uint8_t address, uint16_t slot, uint8_t width) {
 	}
 }
 
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-	if (huart->Instance == USART1) {
-		HAL_GPIO_WritePin(USART1_DE_GPIO_Port, USART1_DE_Pin, GPIO_PIN_RESET);
+void resumeRxDMA(uint8_t wasPaused) {
+	if (!wasPaused) {
+		return;
+	}
+
+	if (HAL_UARTEx_ReceiveToIdle_DMA(&huart1, modbusRxDMABuffer, sizeof(modbusRxDMABuffer)) == HAL_OK) {
+		__HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
 	}
 }
 
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
-	if (huart->Instance == USART1) {
-		HAL_GPIO_WritePin(USART1_DE_GPIO_Port, USART1_DE_Pin, GPIO_PIN_RESET);
+void drainRx(uint32_t timeoutMs) {
+	uint8_t dummy;
+	while (HAL_UART_Receive(&huart1, &dummy, 1, timeoutMs) == HAL_OK) {
 	}
+}
+
+void appendCrc16(uint8_t *data, uint16_t offset) {
+	uint16_t crc = crc16(data, offset);
+	data[offset] = crc & 0xFF;	 // CRC low byte
+	data[offset + 1] = crc >> 8; // CRC high byte
 }
