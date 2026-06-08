@@ -260,7 +260,12 @@ ModbusError_t Modbus_handleWriteSingleRegisterResponse(uint8_t *rxFrame) {
 	return MODBUS_OK;
 }
 HAL_StatusTypeDef Modbus_GetRowCoilsStatus(uint8_t address, uint32_t timeout, uint8_t *coilStatus) {
-	uint16_t len = Slaves[findIndexForAddress(address)].InputRegisters[MODBUS_TOTAL_SLOTS_OFFSET];
+	uint16_t rowIndex = findIndexForAddress(address); // Assuming address corresponds to row index for simplicity
+	if (rowIndex == 0xFF) {
+		LOG_ERROR("Address %d not found among detected slaves\r", address);
+		return HAL_ERROR;
+	}
+	uint16_t len = Slaves[rowIndex].InputRegisters[MODBUS_TOTAL_SLOTS_OFFSET];
 	uint8_t package[] = {
 		address, MODBUS_FUNC_READ_DISCRETE_INPUTS, 0x00, 0x00, (uint8_t)(len >> 8), (uint8_t)(len & 0xFF), 0, 0
 	};

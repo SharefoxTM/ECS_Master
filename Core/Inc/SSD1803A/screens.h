@@ -22,6 +22,7 @@ typedef enum screen_selection {
 	SCREEN_SET_IP,
 	SCREEN_SET_NETMASK,
 	SCREEN_SET_GW,
+	SCREEN_BOOT = 99,
 } screen_selection_t;
 
 typedef enum screen_option {
@@ -45,7 +46,8 @@ typedef enum {
 	OPTIONS_PRINT_HEADER = 1 << 0,
 	OPTIONS_PRINT_VERTICAL_SELECTOR = 1 << 1,
 	OPTIONS_PRINT_HORIZONTAL_SELECTOR = 1 << 2,
-	OPTIONS_PRINT_ENTER_ICON = 1 << 3,
+	OPTIONS_PRINT_INLINE = 1 << 3,
+	OPTIONS_PRINT_ENTER_ICON = 1 << 4,
 } OptionMask;
 
 typedef void (*ScreenFn)(void);
@@ -97,6 +99,7 @@ extern Screen_t *currentScreen;
 extern Screen_t scrMain;
 extern Screen_t scrSettings;
 extern Screen_t scrRows;
+extern Screen_t scrBoot;
 extern uint8_t rowCounter;
 
 #endif // SCREENS_H

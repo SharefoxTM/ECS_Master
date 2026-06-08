@@ -12,6 +12,8 @@ void render_title(Screen_t *screen);
 void render_children(Screen_t *scr, uint8_t offset);
 void render_verticalSelector(uint8_t row);
 void render_horizontalSelector(uint8_t col);
+void render_inlineHorizontalSelector(uint8_t row, uint8_t col);
+void clr_cursors(void);
 
 uint8_t countChildren(Screen_t *scr);
 
@@ -60,7 +62,15 @@ Screen_t scrSlots = {
 	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
 	.handleInput = &rowStatusInput,
 	.function = &rowStatusRender,
-	.renderOptions = OPTIONS_PRINT_HEADER | OPTIONS_PRINT_ENTER_ICON,
+	.renderOptions =
+		OPTIONS_PRINT_HEADER | OPTIONS_PRINT_ENTER_ICON | OPTIONS_PRINT_HORIZONTAL_SELECTOR | OPTIONS_PRINT_INLINE,
+};
+
+Screen_t scrBoot = {
+	.name = "Booting...",
+	.function = &mainRender,
+	.handleInput = NULL,
+	.renderOptions = OPTIONS_PRINT_HEADER,
 };
 
 Screen_t light_on = {
@@ -115,7 +125,7 @@ void screen_init(void) {
 	LOG_VERBOSE("Coupling slots to rows\r");
 	addChild(&scrRows, &scrSlots);
 
-	currentScreen = &scrMain;
+	currentScreen = &scrBoot;
 	currentScreen->function();
 }
 
@@ -168,6 +178,7 @@ void rowStatusRender(void) {
 	}
 	LOG_DEBUG("Rendering row status for row %d\r", rowCounter);
 	screen_updateRowStatusNumber(rowCounter);
+	render_horizontalSelector(0);
 	if (Modbus_GetRowCoilsStatus(rowCounter, MODBUS_RX_TIMEOUT_MS, (uint8_t *)&tempNum) != HAL_OK) {
 		LOG_ERROR("Failed to get status for row %d\r", rowCounter);
 		SSD1803A_setCursor(2, 0);
@@ -201,8 +212,8 @@ void screen_setHorizontalSelectorLocation(uint8_t location) {
 
 void screen_updateRowStatusNumber(uint8_t row) {
 	char temp[16];
-	sprintf(temp, " Row %02d: Back", row);
-	SSD1803A_setCursor(1, 0);
+	sprintf(temp, "Row %02d: Back", row);
+	SSD1803A_setCursor(1, 1);
 	SSD1803A_write(temp);
 }
 
@@ -295,6 +306,7 @@ void render_children(Screen_t *scr, uint8_t offset) {
 		child = child->next;
 	}
 }
+
 void render_verticalSelector(uint8_t row) {
 	if (vSelectorPos != 99) {
 		SSD1803A_setCursor(vSelectorPos, 0);
@@ -306,7 +318,12 @@ void render_verticalSelector(uint8_t row) {
 	}
 	vSelectorPos = row;
 }
+
 void render_horizontalSelector(uint8_t col) {
+	if (currentScreen->renderOptions & OPTIONS_PRINT_INLINE) {
+		render_inlineHorizontalSelector(screen_getVerticalSelectorLocation(), col);
+		return;
+	}
 	if (hSelectorPos != 99) {
 		SSD1803A_setCursor(1, hSelectorPos);
 		SSD1803A_writeCharacter(0x20);
@@ -322,7 +339,42 @@ void render_horizontalSelector(uint8_t col) {
 	hSelectorPos = col;
 }
 
+void render_inlineHorizontalSelector(uint8_t row, uint8_t col) {
+	if (hSelectorPos != 99) {
+		SSD1803A_setCursor(row, hSelectorPos);
+		SSD1803A_writeCharacter(0x20);
+	}
+	if (col != 99) {
+		SSD1803A_setCursor(row, col);
+		SSD1803A_writeCharacter(0x10);
+	}
+	hSelectorPos = col;
+}
+
 void clr_cursors(void) {
 	render_horizontalSelector(99);
 	render_verticalSelector(99);
+}
+
+void screen_show(screen_selection_t screen) {
+	switch (screen) {
+	case SCREEN_HOME:
+		currentScreen = &scrMain;
+		break;
+	case SCREEN_SET_LIGHTS:
+		currentScreen = &scrLights;
+		break;
+	case SCREEN_SHOW_STORAGE_ROWS:
+		currentScreen = &scrRows;
+		break;
+	case SCREEN_CHANGE_IP:
+		currentScreen = &scrSettings;
+		break;
+	case SCREEN_BOOT:
+		currentScreen = &scrBoot;
+		break;
+	default:
+		return;
+	}
+	currentScreen->function();
 }

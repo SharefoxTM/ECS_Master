@@ -27,7 +27,6 @@
 
 void handleVerticalInput(Screen_t *scr, ButtonMask btn);
 void handleHorizontalInput(Screen_t *scr, ButtonMask btn);
-void handleVerticalSelector(Screen_t *scr, ButtonMask btn);
 ButtonMask prevBtn;
 extern uint8_t rowCounter;
 
@@ -168,9 +167,9 @@ void mainInput(Screen_t *scr, ButtonMask btn, void *arg) {
 }
 
 void rowStatusInput(Screen_t *scr, ButtonMask btn, void *arg) {
+	uint8_t *pRowCounter = (uint8_t *)arg;
 	if (btn & (BTN_DOWN | BTN_UP)) {
 		// Increment or decrement row number
-		uint8_t *pRowCounter = (uint8_t *)arg;
 		if (btn & BTN_DOWN) {
 			(*pRowCounter)++;
 			if (*pRowCounter == 17) {
@@ -184,13 +183,18 @@ void rowStatusInput(Screen_t *scr, ButtonMask btn, void *arg) {
 		}
 		screen_updateRowStatusNumber(*pRowCounter);
 	}
+	if (btn & (BTN_RIGHT | BTN_LEFT)) {
+		// Handle horizontal if allowed
+		handleHorizontalInput(scr, btn);
+	}
 	if (btn & BTN_ENTER) {
 		if (screen_getHorizontalSelectorLocation() == 0) {
 			uint64_t tempNum;
-			if (Modbus_GetRowCoilsStatus(rowCounter, MODBUS_RX_TIMEOUT_MS, (uint8_t *)&tempNum) != HAL_OK) {
-				LOG_ERROR("Failed to get status for row %d\r", rowCounter);
+			LOG_VERBOSE("Requesting coil status for row %d\r", *pRowCounter);
+			if (Modbus_GetRowCoilsStatus(*pRowCounter, MODBUS_RX_TIMEOUT_MS, (uint8_t *)&tempNum) != HAL_OK) {
+				LOG_DEBUG("Failed to get status for row %d\r", *pRowCounter);
 				SSD1803A_setCursor(2, 0);
-				SSD1803A_write("Row unavailable");
+				SSD1803A_write("Row unavailable ");
 				return;
 			}
 			screen_updateRowStatusData(tempNum);
@@ -232,29 +236,25 @@ void handleVerticalInput(Screen_t *scr, ButtonMask btn) {
 }
 
 void handleHorizontalInput(Screen_t *scr, ButtonMask btn) {
-	uint8_t location;
+	uint8_t location, amount = 1;
+	if (currentScreen->renderOptions & OPTIONS_PRINT_INLINE) {
+		amount = 8;
+	}
 	location = screen_getHorizontalSelectorLocation();
 
 	if (btn & BTN_RIGHT) {
-		location++;
+		location += amount;
 		if (location > 15) {
 			location = 0;
 		}
 		screen_setHorizontalSelectorLocation(location);
 	} else if (btn & BTN_LEFT) {
 		if (location == 0) {
-			location = 15;
+			location = 16 - amount;
 		} else {
-			location--;
+			location -= amount;
 		}
 		screen_setHorizontalSelectorLocation(location);
 	}
 }
-
-void handleVerticalSelector(Screen_t *scr, ButtonMask btn) {
-	if (btn & BTN_DOWN) {
-	} else if (btn & BTN_UP) {
-	}
-}
-
 /* USER CODE END 2 */
