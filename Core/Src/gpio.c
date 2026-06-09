@@ -22,13 +22,25 @@
 #include "gpio.h"
 
 /* USER CODE BEGIN 0 */
+#include "SSD1803A/screens.h"
 #include "Utilities/log.h"
 #include "modbus/modbus.h"
+#include <math.h>
 
 void handleVerticalInput(Screen_t *scr, ButtonMask btn);
+void handleVerticalNetworkInput(Screen_t *scr, ButtonMask btn);
 void handleHorizontalInput(Screen_t *scr, ButtonMask btn);
 ButtonMask prevBtn;
 extern uint8_t rowCounter;
+
+extern ip_addr_t screen_ip;
+extern ip_addr_t screen_subnet;
+extern ip_addr_t screen_gateway;
+extern Screen_t scrNetwork;
+extern Screen_t scrIP;
+extern Screen_t scrSubnet;
+extern Screen_t scrGateway;
+extern Screen_t scrNetworkSubmit;
 
 /* USER CODE END 0 */
 
@@ -205,6 +217,25 @@ void rowStatusInput(Screen_t *scr, ButtonMask btn, void *arg) {
 	}
 }
 
+void networkInput(Screen_t *scr, ButtonMask btn, void *arg) {
+	if (btn & (BTN_DOWN | BTN_UP)) {
+		// Handle vertical if allowed
+		handleVerticalNetworkInput(scr, btn);
+	}
+
+	if ((scr->allowedButtons & (BTN_RIGHT | BTN_LEFT)) && (btn & (BTN_RIGHT | BTN_LEFT))) {
+		// Handle horizontal if allowed
+		handleHorizontalInput(scr, btn);
+	}
+
+	if (btn & BTN_ENTER) {
+		if (scr->name != scrNetworkSubmit.name) {
+			currentScreen = scr->parent;
+		}
+		currentScreen->function();
+	}
+}
+
 void nextPageInput(Screen_t *scr, ButtonMask btn, void *arg) {
 }
 
@@ -235,6 +266,44 @@ void handleVerticalInput(Screen_t *scr, ButtonMask btn) {
 	screen_setVerticalSelectorLocation(location);
 }
 
+void handleVerticalNetworkInput(Screen_t *scr, ButtonMask btn) {
+	uint32_t *addr;
+	uint16_t octet;
+	uint8_t location;
+	if (scr->name == scrIP.name) {
+		addr = (uint32_t *)&screen_ip;
+	} else if (scr->name == scrSubnet.name) {
+		addr = (uint32_t *)&screen_subnet;
+	} else if (scr->name == scrGateway.name) {
+		addr = (uint32_t *)&screen_gateway;
+	}
+	location = screen_getHorizontalSelectorLocation();
+	if (location < 4) {
+		octet = (*addr) & 0xFF;
+	} else if (location < 8) {
+		octet = ((*addr) >> 8) & 0xFF;
+	} else if (location < 12) {
+		octet = ((*addr) >> 16) & 0xFF;
+	} else {
+		octet = ((*addr) >> 24) & 0xFF;
+	}
+	if (btn & BTN_DOWN) {
+		// TODO: Implement decrementing by 1s, 10s and 100s
+	} else if (btn & BTN_UP) {
+		// TODO: Implement incrementing by 1s, 10s and 100s
+	}
+	if (location < 4) {
+		*addr = ((uint32_t)*addr & 0xFFFFFF00) | (octet);
+	} else if (location < 8) {
+		*addr = ((uint32_t)*addr & 0xFFFF00FF) | (octet << 8);
+	} else if (location < 12) {
+		*addr = ((uint32_t)*addr & 0xFF00FFFF) | (octet << 16);
+	} else {
+		*addr = ((uint32_t)*addr & 0x00FFFFFF) | (octet << 24);
+	}
+	render_networkSettings(scr);
+}
+
 void handleHorizontalInput(Screen_t *scr, ButtonMask btn) {
 	uint8_t location, amount = 1;
 	if (currentScreen->renderOptions & OPTIONS_PRINT_INLINE) {
@@ -244,6 +313,11 @@ void handleHorizontalInput(Screen_t *scr, ButtonMask btn) {
 
 	if (btn & BTN_RIGHT) {
 		location += amount;
+		if (currentScreen->renderOptions & OPTIONS_NETWORK) {
+			if (location % 4 == 3) {
+				location++;
+			}
+		}
 		if (location > 15) {
 			location = 0;
 		}
@@ -253,6 +327,11 @@ void handleHorizontalInput(Screen_t *scr, ButtonMask btn) {
 			location = 16 - amount;
 		} else {
 			location -= amount;
+		}
+		if (currentScreen->renderOptions & OPTIONS_NETWORK) {
+			if (location % 4 == 3) {
+				location--;
+			}
 		}
 		screen_setHorizontalSelectorLocation(location);
 	}

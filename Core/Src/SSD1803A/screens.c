@@ -1,15 +1,16 @@
-#include "../Inc/SSD1803A/screens.h"
+#include "SSD1803A/screens.h"
 #include "SSD1803A/SSD1803A_driver.h"
+#include "SSD1803A/screens_data.h"
 #include "Utilities/log.h"
 #include "modbus/modbus.h"
 #include "modbus/modbus_conf.h"
-#include "stm32f1xx_hal.h"
 #include <stdint.h>
 #include <string.h>
 
 void addChild(Screen_t *parent, Screen_t *child);
 void render_title(Screen_t *screen);
 void render_children(Screen_t *scr, uint8_t offset);
+void render_networkSettings(Screen_t *scr);
 void render_verticalSelector(uint8_t row);
 void render_horizontalSelector(uint8_t col);
 void render_inlineHorizontalSelector(uint8_t row, uint8_t col);
@@ -25,81 +26,9 @@ uint8_t hSelectorPos = 99;
 
 uint8_t rowCounter = 1;
 
-Screen_t scrMain = {
-	.name = "Main menu",
-	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
-	.handleInput = &mainInput,
-	.function = &mainRender,
-	.renderOptions = OPTIONS_PRINT_HEADER | OPTIONS_PRINT_VERTICAL_SELECTOR | OPTIONS_PRINT_ENTER_ICON,
-};
-
-Screen_t scrLights = {
-	.name = "Lights",
-	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
-	.handleInput = &mainInput,
-	.function = &mainRender,
-	.renderOptions = OPTIONS_PRINT_VERTICAL_SELECTOR | OPTIONS_PRINT_ENTER_ICON,
-};
-
-Screen_t scrSettings = {
-	.name = "Settings",
-	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
-	.handleInput = &mainInput,
-	.function = &mainRender,
-	.renderOptions = OPTIONS_PRINT_VERTICAL_SELECTOR | OPTIONS_PRINT_ENTER_ICON,
-};
-
-Screen_t scrRows = {
-	.name = "Rows",
-	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
-	.handleInput = &mainInput,
-	.function = &mainRender,
-	.renderOptions = OPTIONS_PRINT_HEADER | OPTIONS_PRINT_VERTICAL_SELECTOR | OPTIONS_PRINT_ENTER_ICON,
-};
-
-Screen_t scrSlots = {
-	.name = "Slots",
-	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
-	.handleInput = &rowStatusInput,
-	.function = &rowStatusRender,
-	.renderOptions =
-		OPTIONS_PRINT_HEADER | OPTIONS_PRINT_ENTER_ICON | OPTIONS_PRINT_HORIZONTAL_SELECTOR | OPTIONS_PRINT_INLINE,
-};
-
-Screen_t scrBoot = {
-	.name = "Booting...",
-	.function = &mainRender,
-	.handleInput = NULL,
-	.renderOptions = OPTIONS_PRINT_HEADER,
-};
-
-Screen_t light_on = {
-	.name = "ON",
-	.function = &setLights,
-};
-
-Screen_t light_vegas = {
-	.name = "VEGAS",
-	.function = &setLights,
-};
-
-Screen_t light_KR = {
-	.name = "KNIGHT RIDER",
-	.function = &setLights,
-};
-
-Screen_t light_off = {
-	.name = "OFF",
-	.function = &setLights,
-};
-
-Screen_t nextPage = {
-	.name = "NEXT PAGE",
-	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
-	.handleInput = nextPageInput,
-	.function = nextPageRender,
-	.renderOptions = OPTIONS_PRINT_HEADER | OPTIONS_PRINT_VERTICAL_SELECTOR | OPTIONS_PRINT_ENTER_ICON,
-};
+uint32_t screen_ip;
+uint32_t screen_subnet;
+uint32_t screen_gateway;
 
 void screen_init(void) {
 	LOG_INFO("Initializing screen\r");
@@ -125,6 +54,21 @@ void screen_init(void) {
 	LOG_VERBOSE("Coupling slots to rows\r");
 	addChild(&scrRows, &scrSlots);
 
+	LOG_VERBOSE("Coupling network to settings\r");
+	addChild(&scrSettings, &scrNetwork);
+
+	LOG_VERBOSE("Coupling IP to network\r");
+	addChild(&scrNetwork, &scrIP);
+	LOG_VERBOSE("Coupling subnet to network\r");
+	addChild(&scrNetwork, &scrSubnet);
+	LOG_VERBOSE("Coupling gateway to network\r");
+	addChild(&scrNetwork, &scrGateway);
+	LOG_VERBOSE("Coupling submit to network\r");
+	addChild(&scrNetwork, &scrNetworkSubmit);
+	LOG_VERBOSE("Finished coupling children\r");
+	screen_ip = gnetif.ip_addr.addr;
+	screen_subnet = gnetif.netmask.addr;
+	screen_gateway = gnetif.gw.addr;
 	currentScreen = &scrBoot;
 	currentScreen->function();
 }
@@ -194,6 +138,12 @@ void nextPageRender(void) {
 	render_verticalSelector(0);
 }
 
+void networkRender(void) {
+	render_title(currentScreen);
+	render_networkSettings(currentScreen);
+	render_horizontalSelector(0);
+}
+
 uint8_t screen_getVerticalSelectorLocation(void) {
 	return vSelectorPos;
 }
@@ -253,10 +203,12 @@ Screen_t *screen_getChildAtIndex(Screen_t *scr, uint8_t location) {
 
 void setLights(void) {
 	LOG_DEBUG("SETTING LIGHTS: %s\r", currentScreen->name);
-	// TODO: Implement the change lights functionality
 	Modbus_ChangeLedMode(MODBUS_SLAVE_BROADCAST, screen_getVerticalSelectorLocation());
 	currentScreen = &scrMain;
 	currentScreen->function();
+}
+
+void networkSubmit(void) {
 }
 
 void addChild(Screen_t *parent, Screen_t *child) {
@@ -307,6 +259,22 @@ void render_children(Screen_t *scr, uint8_t offset) {
 	}
 }
 
+void render_networkSettings(Screen_t *scr) {
+	SSD1803A_setCursor(2, 0);
+	if (scr->name == scrIP.name) {
+		SSD1803A_writeIP(screen_ip);
+		return;
+	}
+	if (scr->name == scrSubnet.name) {
+		SSD1803A_writeIP(screen_subnet);
+		return;
+	}
+	if (scr->name == scrGateway.name) {
+		SSD1803A_writeIP(screen_gateway);
+		return;
+	}
+}
+
 void render_verticalSelector(uint8_t row) {
 	if (vSelectorPos != 99) {
 		SSD1803A_setCursor(vSelectorPos, 0);
@@ -334,7 +302,7 @@ void render_horizontalSelector(uint8_t col) {
 		SSD1803A_setCursor(1, col);
 		SSD1803A_writeCharacter(0x12);
 		SSD1803A_setCursor(3, col);
-		SSD1803A_writeCharacter(0x12);
+		SSD1803A_writeCharacter(0x13);
 	}
 	hSelectorPos = col;
 }

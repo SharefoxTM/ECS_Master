@@ -10,7 +10,6 @@
 #define SCREENS_H
 
 #include "SSD1803A_driver.h"
-// #include "storage.h"
 
 typedef enum screen_selection {
 	SCREEN_OFF,
@@ -48,6 +47,7 @@ typedef enum {
 	OPTIONS_PRINT_HORIZONTAL_SELECTOR = 1 << 2,
 	OPTIONS_PRINT_INLINE = 1 << 3,
 	OPTIONS_PRINT_ENTER_ICON = 1 << 4,
+	OPTIONS_NETWORK = 1 << 5, // For network screens, to handle horizontal selector skipping dots
 } OptionMask;
 
 typedef void (*ScreenFn)(void);
@@ -72,11 +72,16 @@ void screen_init(void);
 void mainRender(void);
 void rowStatusRender(void);
 void nextPageRender(void);
+void networkRender(void);
 void setLights(void);
+void networkSubmit(void);
+
+void render_networkSettings(Screen_t *scr);
 
 void mainInput(Screen_t *scr, ButtonMask btn, void *arg);
 void rowStatusInput(Screen_t *scr, ButtonMask btn, void *arg);
 void nextPageInput(Screen_t *scr, ButtonMask btn, void *arg);
+void networkInput(Screen_t *scr, ButtonMask btn, void *arg);
 
 screen_selection_t get_currentScreen(void);
 void set_currentScreen(screen_selection_t screen);
@@ -100,6 +105,12 @@ extern Screen_t scrMain;
 extern Screen_t scrSettings;
 extern Screen_t scrRows;
 extern Screen_t scrBoot;
+extern Screen_t scrLights;
+extern Screen_t scrSlots;
+extern Screen_t scrNetwork;
+extern Screen_t scrIP;
+extern Screen_t scrSubnet;
+extern Screen_t scrGateway;
 extern uint8_t rowCounter;
 
 #endif // SCREENS_H
