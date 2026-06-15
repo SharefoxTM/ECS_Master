@@ -1,5 +1,6 @@
 #include "SSD1803A/SSD1803A_driver.h"
 #include "i2c.h"
+#include "ip4_addr.h"
 
 uint8_t entrymode;
 uint8_t displaycontrol;
@@ -237,9 +238,9 @@ void SSD1803A_writeByte(uint8_t byte) {
 	SSD1803A_write(printer);
 }
 
-void SSD1803A_writeIP(uint32_t ip) {
+void SSD1803A_writeIP(ip4_addr_t *ip) {
 	char printer[16];
-	sprintf(printer, "%03d.%03d.%03d.%03d", ip & 0xFF, (ip >> 8) & 0xFF, (ip >> 16) & 0xFF, (ip >> 24) & 0xFF);
+	sprintf(printer, "%03d.%03d.%03d.%03d", ip4_addr1(ip), ip4_addr2(ip), ip4_addr3(ip), ip4_addr4(ip));
 	SSD1803A_write(printer);
 }
 

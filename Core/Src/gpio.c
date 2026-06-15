@@ -267,39 +267,75 @@ void handleVerticalInput(Screen_t *scr, ButtonMask btn) {
 }
 
 void handleVerticalNetworkInput(Screen_t *scr, ButtonMask btn) {
-	uint32_t *addr;
-	uint16_t octet;
+	ip4_addr_t *addr;
+	uint8_t octet;
 	uint8_t location;
 	if (scr->name == scrIP.name) {
-		addr = (uint32_t *)&screen_ip;
+		addr = &screen_ip;
 	} else if (scr->name == scrSubnet.name) {
-		addr = (uint32_t *)&screen_subnet;
+		addr = &screen_subnet;
 	} else if (scr->name == scrGateway.name) {
-		addr = (uint32_t *)&screen_gateway;
+		addr = &screen_gateway;
 	}
 	location = screen_getHorizontalSelectorLocation();
 	if (location < 4) {
-		octet = (*addr) & 0xFF;
+		octet = ip4_addr1(addr);
 	} else if (location < 8) {
-		octet = ((*addr) >> 8) & 0xFF;
+		octet = ip4_addr2(addr);
 	} else if (location < 12) {
-		octet = ((*addr) >> 16) & 0xFF;
+		octet = ip4_addr3(addr);
 	} else {
-		octet = ((*addr) >> 24) & 0xFF;
+		octet = ip4_addr4(addr);
 	}
 	if (btn & BTN_DOWN) {
-		// TODO: Implement decrementing by 1s, 10s and 100s
+		if (location % 4 == 2) {
+			if (octet > 0) {
+				octet -= 1;
+			} else {
+				octet = 255;
+			}
+		} else if (location % 4 == 1) {
+			if (octet > 9) {
+				octet -= 10;
+			} else {
+				octet = (octet + 246) % 256;
+			}
+		} else if (location % 4 == 0) {
+			if (octet > 99) {
+				octet -= 100;
+			} else {
+				octet = (octet + 156) % 256;
+			}
+		}
 	} else if (btn & BTN_UP) {
-		// TODO: Implement incrementing by 1s, 10s and 100s
+		if (location % 4 == 2) {
+			if (octet < 255) {
+				octet += 1;
+			} else {
+				octet = 0;
+			}
+		} else if (location % 4 == 1) {
+			if (octet < 246) {
+				octet += 10;
+			} else {
+				octet = (octet + 10) % 256;
+			}
+		} else if (location % 4 == 0) {
+			if (octet < 156) {
+				octet += 100;
+			} else {
+				octet = (octet + 100) % 256;
+			}
+		}
 	}
 	if (location < 4) {
-		*addr = ((uint32_t)*addr & 0xFFFFFF00) | (octet);
+		ip4_addr_set_u32(addr, (ip4_addr_get_u32(addr) & 0xFFFFFF00) | (octet));
 	} else if (location < 8) {
-		*addr = ((uint32_t)*addr & 0xFFFF00FF) | (octet << 8);
+		ip4_addr_set_u32(addr, (ip4_addr_get_u32(addr) & 0xFFFF00FF) | (octet << 8));
 	} else if (location < 12) {
-		*addr = ((uint32_t)*addr & 0xFF00FFFF) | (octet << 16);
+		ip4_addr_set_u32(addr, (ip4_addr_get_u32(addr) & 0xFF00FFFF) | (octet << 16));
 	} else {
-		*addr = ((uint32_t)*addr & 0x00FFFFFF) | (octet << 24);
+		ip4_addr_set_u32(addr, (ip4_addr_get_u32(addr) & 0x00FFFFFF) | (octet << 24));
 	}
 	render_networkSettings(scr);
 }

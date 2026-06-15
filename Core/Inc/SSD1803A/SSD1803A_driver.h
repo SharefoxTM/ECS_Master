@@ -124,6 +124,6 @@ void SSD1803A_write(char *buffer);
 void SSD1803A_writeCharacter(char character);
 void SSD1803A_writeNumber(uint8_t num);
 void SSD1803A_writeByte(uint8_t byte);
-void SSD1803A_writeIP(uint32_t ip);
+void SSD1803A_writeIP(ip4_addr_t *ip);
 
 #endif // SSD1803A_DRIVER_H

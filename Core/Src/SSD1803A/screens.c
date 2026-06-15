@@ -1,11 +1,13 @@
 #include "SSD1803A/screens.h"
 #include "SSD1803A/SSD1803A_driver.h"
 #include "SSD1803A/screens_data.h"
+#include "TCP/tcp_server.h"
 #include "Utilities/log.h"
 #include "modbus/modbus.h"
 #include "modbus/modbus_conf.h"
 #include <stdint.h>
 #include <string.h>
+
 
 void addChild(Screen_t *parent, Screen_t *child);
 void render_title(Screen_t *screen);
@@ -26,9 +28,9 @@ uint8_t hSelectorPos = 99;
 
 uint8_t rowCounter = 1;
 
-uint32_t screen_ip;
-uint32_t screen_subnet;
-uint32_t screen_gateway;
+ip4_addr_t screen_ip;
+ip4_addr_t screen_subnet;
+ip4_addr_t screen_gateway;
 
 void screen_init(void) {
 	LOG_INFO("Initializing screen\r");
@@ -66,9 +68,9 @@ void screen_init(void) {
 	LOG_VERBOSE("Coupling submit to network\r");
 	addChild(&scrNetwork, &scrNetworkSubmit);
 	LOG_VERBOSE("Finished coupling children\r");
-	screen_ip = gnetif.ip_addr.addr;
-	screen_subnet = gnetif.netmask.addr;
-	screen_gateway = gnetif.gw.addr;
+	screen_ip = gnetif.ip_addr;
+	screen_subnet = gnetif.netmask;
+	screen_gateway = gnetif.gw;
 	currentScreen = &scrBoot;
 	currentScreen->function();
 }
@@ -209,6 +211,8 @@ void setLights(void) {
 }
 
 void networkSubmit(void) {
+	tcp_server_change_address((uint8_t *)ip4_addr_get_u32(&screen_ip), (uint8_t *)ip4_addr_get_u32(&screen_subnet),
+														(uint8_t *)ip4_addr_get_u32(&screen_gateway));
 }
 
 void addChild(Screen_t *parent, Screen_t *child) {
@@ -262,15 +266,15 @@ void render_children(Screen_t *scr, uint8_t offset) {
 void render_networkSettings(Screen_t *scr) {
 	SSD1803A_setCursor(2, 0);
 	if (scr->name == scrIP.name) {
-		SSD1803A_writeIP(screen_ip);
+		SSD1803A_writeIP(&screen_ip);
 		return;
 	}
 	if (scr->name == scrSubnet.name) {
-		SSD1803A_writeIP(screen_subnet);
+		SSD1803A_writeIP(&screen_subnet);
 		return;
 	}
 	if (scr->name == scrGateway.name) {
-		SSD1803A_writeIP(screen_gateway);
+		SSD1803A_writeIP(&screen_gateway);
 		return;
 	}
 }
