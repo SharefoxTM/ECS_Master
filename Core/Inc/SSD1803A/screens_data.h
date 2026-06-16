@@ -90,7 +90,7 @@ Screen_t scrNetwork = {
 // Submenu of network
 Screen_t scrIP = {
 	.name = "IP Address",
-	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
+	.allowedButtons = BTN_DOWN | BTN_UP | BTN_RIGHT | BTN_LEFT | BTN_ENTER,
 	.handleInput = &networkInput,
 	.function = &networkRender,
 	.renderOptions = OPTIONS_PRINT_ENTER_ICON | OPTIONS_PRINT_HORIZONTAL_SELECTOR | OPTIONS_NETWORK,
@@ -98,7 +98,7 @@ Screen_t scrIP = {
 
 Screen_t scrSubnet = {
 	.name = "Subnet Mask",
-	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
+	.allowedButtons = BTN_DOWN | BTN_UP | BTN_RIGHT | BTN_LEFT | BTN_ENTER,
 	.handleInput = &networkInput,
 	.function = &networkRender,
 	.renderOptions = OPTIONS_PRINT_ENTER_ICON | OPTIONS_PRINT_HORIZONTAL_SELECTOR | OPTIONS_NETWORK,
@@ -106,7 +106,7 @@ Screen_t scrSubnet = {
 
 Screen_t scrGateway = {
 	.name = "Gateway",
-	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
+	.allowedButtons = BTN_DOWN | BTN_UP | BTN_RIGHT | BTN_LEFT | BTN_ENTER,
 	.handleInput = &networkInput,
 	.function = &networkRender,
 	.renderOptions = OPTIONS_PRINT_ENTER_ICON | OPTIONS_PRINT_HORIZONTAL_SELECTOR | OPTIONS_NETWORK,
@@ -114,6 +114,8 @@ Screen_t scrGateway = {
 
 Screen_t scrNetworkSubmit = {
 	.name = "Submit",
+	.allowedButtons = BTN_ENTER,
+	.handleInput = &networkInput,
 	.function = &networkSubmit,
 };
 

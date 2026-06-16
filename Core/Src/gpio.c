@@ -219,12 +219,10 @@ void rowStatusInput(Screen_t *scr, ButtonMask btn, void *arg) {
 
 void networkInput(Screen_t *scr, ButtonMask btn, void *arg) {
 	if (btn & (BTN_DOWN | BTN_UP)) {
-		// Handle vertical if allowed
 		handleVerticalNetworkInput(scr, btn);
 	}
 
-	if ((scr->allowedButtons & (BTN_RIGHT | BTN_LEFT)) && (btn & (BTN_RIGHT | BTN_LEFT))) {
-		// Handle horizontal if allowed
+	if (btn & (BTN_RIGHT | BTN_LEFT)) {
 		handleHorizontalInput(scr, btn);
 	}
 
@@ -349,7 +347,7 @@ void handleHorizontalInput(Screen_t *scr, ButtonMask btn) {
 
 	if (btn & BTN_RIGHT) {
 		location += amount;
-		if (currentScreen->renderOptions & OPTIONS_NETWORK) {
+		if (scr->renderOptions & OPTIONS_NETWORK) {
 			if (location % 4 == 3) {
 				location++;
 			}
