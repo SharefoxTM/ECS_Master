@@ -19,16 +19,9 @@
 extern struct tcp_pcb *tcp_server_pcb;
 
 tcp_server_error_t tcp_server_init(struct tcp_pcb *tcp_server_pcb);
-tcp_server_error_t tcp_server_close(struct tcp_pcb *tpcb,
-                                    tcp_server_struct_t *es);
-tcp_server_error_t tcp_server_error(struct tcp_pcb *tpcb,
-                                    tcp_server_struct_t *es,
-                                    tcp_server_error_t err);
-tcp_server_error_t tcp_server_change_address(struct tcp_pcb *tpcb,
-                                             tcp_server_struct_t *es,
-                                             uint8_t *ipaddr, uint8_t *netmask,
-                                             uint8_t *gateway);
-tcp_server_error_t tcp_server_send_response(struct tcp_pcb *tpcb,
-                                            const cJSON *resp);
+tcp_server_error_t tcp_server_close(struct tcp_pcb *tpcb, tcp_server_struct_t *es);
+tcp_server_error_t tcp_server_error(struct tcp_pcb *tpcb, tcp_server_struct_t *es, tcp_server_error_t err);
+tcp_server_error_t tcp_server_send_response(struct tcp_pcb *tpcb, const cJSON *resp);
+tcp_server_error_t tcp_server_change_address(ip4_addr_t ipaddr, ip4_addr_t netmask, ip4_addr_t gateway);
 
 #endif // TCP_SERVER_H

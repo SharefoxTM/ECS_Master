@@ -1,20 +1,20 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file    stm32f1xx_it.c
-  * @brief   Interrupt Service Routines.
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2025 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file    stm32f1xx_it.c
+ * @brief   Interrupt Service Routines.
+ ******************************************************************************
+ * @attention
+ *
+ * Copyright (c) 2025 STMicroelectronics.
+ * All rights reserved.
+ *
+ * This software is licensed under terms that can be found in the LICENSE file
+ * in the root directory of this software component.
+ * If no LICENSE file comes with this software, it is provided AS-IS.
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
@@ -22,6 +22,7 @@
 #include "stm32f1xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "Utilities/log.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,7 +52,8 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+uint32_t faultGetActiveStackPointer(void);
+void faultLogContext(const char *faultName);
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -72,12 +74,12 @@ extern UART_HandleTypeDef huart1;
 void NMI_Handler(void)
 {
   /* USER CODE BEGIN NonMaskableInt_IRQn 0 */
+	faultLogContext("NMI");
 
   /* USER CODE END NonMaskableInt_IRQn 0 */
   /* USER CODE BEGIN NonMaskableInt_IRQn 1 */
-   while (1)
-  {
-  }
+	while (1) {
+	}
   /* USER CODE END NonMaskableInt_IRQn 1 */
 }
 
@@ -87,6 +89,7 @@ void NMI_Handler(void)
 void HardFault_Handler(void)
 {
   /* USER CODE BEGIN HardFault_IRQn 0 */
+	faultLogContext("HardFault");
 
   /* USER CODE END HardFault_IRQn 0 */
   while (1)
@@ -102,6 +105,7 @@ void HardFault_Handler(void)
 void MemManage_Handler(void)
 {
   /* USER CODE BEGIN MemoryManagement_IRQn 0 */
+	faultLogContext("MemManage");
 
   /* USER CODE END MemoryManagement_IRQn 0 */
   while (1)
@@ -117,6 +121,7 @@ void MemManage_Handler(void)
 void BusFault_Handler(void)
 {
   /* USER CODE BEGIN BusFault_IRQn 0 */
+	faultLogContext("BusFault");
 
   /* USER CODE END BusFault_IRQn 0 */
   while (1)
@@ -132,6 +137,7 @@ void BusFault_Handler(void)
 void UsageFault_Handler(void)
 {
   /* USER CODE BEGIN UsageFault_IRQn 0 */
+	faultLogContext("UsageFault");
 
   /* USER CODE END UsageFault_IRQn 0 */
   while (1)
@@ -259,4 +265,48 @@ void TIM6_IRQHandler(void)
 
 /* USER CODE BEGIN 1 */
 
+uint32_t faultGetActiveStackPointer(void) {
+	uint32_t stackPtr;
+	__asm volatile("tst lr, #4     \n"
+								 "ite eq         \n"
+								 "mrseq %0, msp  \n"
+								 "mrsne %0, psp  \n"
+								 : "=r"(stackPtr));
+	return stackPtr;
+}
+
+uint32_t faultGetLr(void) {
+	uint32_t lrValue;
+	__asm volatile("mov %0, lr" : "=r"(lrValue));
+	return lrValue;
+}
+
+uint32_t faultGetControl(void) {
+	uint32_t controlValue;
+	__asm volatile("mrs %0, control" : "=r"(controlValue));
+	return controlValue;
+}
+
+uint32_t faultGetIpsr(void) {
+	uint32_t ipsrValue;
+	__asm volatile("mrs %0, ipsr" : "=r"(ipsrValue));
+	return ipsrValue;
+}
+
+void faultLogContext(const char *faultName) {
+	uint32_t sp = faultGetActiveStackPointer();
+	uint32_t *stacked = (uint32_t *)sp;
+
+	LOG_ERROR("================ FAULT =================");
+	LOG_ERROR("Fault: %s", faultName);
+	LOG_ERROR("SCB HFSR=0x%08lX CFSR=0x%08lX BFAR=0x%08lX MMFAR=0x%08lX", SCB->HFSR, SCB->CFSR, SCB->BFAR, SCB->MMFAR);
+	LOG_ERROR("SP=0x%08lX LR=0x%08lX CONTROL=0x%08lX IPSR=0x%08lX", sp, faultGetLr(), faultGetControl(), faultGetIpsr());
+
+	if (stacked != NULL) {
+		LOG_ERROR("Stacked R0=0x%08lX R1=0x%08lX R2=0x%08lX R3=0x%08lX", stacked[0], stacked[1], stacked[2], stacked[3]);
+		LOG_ERROR("Stacked R12=0x%08lX LR=0x%08lX PC=0x%08lX xPSR=0x%08lX", stacked[4], stacked[5], stacked[6], stacked[7]);
+	}
+
+	LOG_ERROR("========================================");
+}
 /* USER CODE END 1 */

@@ -37,7 +37,7 @@ extern UART_HandleTypeDef huart4;
 extern UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN Private defines */
-extern uint8_t MODBUS_DMA_RXData[256];
+extern uint8_t modbusRxDMABuffer[256];
 /* USER CODE END Private defines */
 
 void MX_UART4_Init(void);
