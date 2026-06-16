@@ -73,7 +73,7 @@ void SystemClock_Config(void);
 int main(void) {
 
 	/* USER CODE BEGIN 1 */
-	// struct tcp_pcb *tcp_server_pcb = NULL;
+	struct tcp_pcb *tcp_server_pcb = NULL;
 	/* USER CODE END 1 */
 
 	/* MCU Configuration--------------------------------------------------------*/
@@ -103,7 +103,7 @@ int main(void) {
 	/* USER CODE BEGIN 2 */
 	screen_init();
 	Modbus_init();
-	// tcp_server_init(tcp_server_pcb);
+	tcp_server_init(tcp_server_pcb);
 	screen_show(SCREEN_HOME);
 	printSplashScreen();
 
@@ -115,10 +115,6 @@ int main(void) {
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
-		// if (MODBUS_UART_Circ_Buffer.newDataFlag == 1) {
-		//   // TODO: Process new data in MODBUS_UART_Circ_Buffer.buffer
-		//   MODBUS_UART_Circ_Buffer.newDataFlag = 0;
-		// }
 		MX_LWIP_Process();
 		gpio_getUserInput();
 	}

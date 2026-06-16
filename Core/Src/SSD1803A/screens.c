@@ -8,7 +8,6 @@
 #include <stdint.h>
 #include <string.h>
 
-
 void addChild(Screen_t *parent, Screen_t *child);
 void render_title(Screen_t *screen);
 void render_children(Screen_t *scr, uint8_t offset);
@@ -211,8 +210,15 @@ void setLights(void) {
 }
 
 void networkSubmit(void) {
-	tcp_server_change_address((uint8_t *)ip4_addr_get_u32(&screen_ip), (uint8_t *)ip4_addr_get_u32(&screen_subnet),
-														(uint8_t *)ip4_addr_get_u32(&screen_gateway));
+	LOG_DEBUG("Submitting network settings\r");
+	LOG_DEBUG("New IP: %s\r", ip4addr_ntoa(&screen_ip));
+	LOG_DEBUG("New Subnet: %s\r", ip4addr_ntoa(&screen_subnet));
+	LOG_DEBUG("New Gateway: %s\r", ip4addr_ntoa(&screen_gateway));
+	LOG_DEBUG("Changing TCP server address\r");
+	tcp_server_change_address(screen_ip, screen_subnet, screen_gateway);
+	LOG_DEBUG("Settings submitted, returning to main menu\r");
+	currentScreen = &scrMain;
+	currentScreen->function();
 }
 
 void addChild(Screen_t *parent, Screen_t *child) {

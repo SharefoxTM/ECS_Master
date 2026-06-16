@@ -9,12 +9,15 @@ err_t sent(void *arg, struct tcp_pcb *tpcb, uint16_t len);
 
 err_t send_response(struct tcp_pcb *newpcb, cJSON *resp);
 
+extern struct netif gnetif;
+
 /**
  * @brief  Initialize the TCP server
  * @param  None
  * @retval tcp_server_error_t: Error code indicating success or type of failure
  */
 tcp_server_error_t tcp_server_init(struct tcp_pcb *tcp_server_pcb) {
+	LOG_INFO("Initializing TCP server\r");
 	tcp_server_pcb = tcp_new();
 	if (!tcp_server_pcb) {
 		return TCP_SERVER_ERR_MEM;
@@ -88,16 +91,14 @@ tcp_server_error_t tcp_server_send_response(struct tcp_pcb *tpcb, const cJSON *r
  *   @retval tcp_server_error_t: Error code indicating success or type of
  *   failure
  */
-tcp_server_error_t tcp_server_change_address(uint8_t *ipaddr, uint8_t *netmask, uint8_t *gateway) {
-	ip_addr_t ip;
-	ip_addr_t mask;
-	ip_addr_t gw;
-	netif_set_down(netif_default);
-	IP4_ADDR(&ip, ipaddr[0], ipaddr[1], ipaddr[2], ipaddr[3]);
-	IP4_ADDR(&mask, netmask[0], netmask[1], netmask[2], netmask[3]);
-	IP4_ADDR(&gw, gateway[0], gateway[1], gateway[2], gateway[3]);
-	netif_set_addr(netif_default, &ip, &mask, &gw);
-	netif_set_up(netif_default);
+tcp_server_error_t tcp_server_change_address(ip4_addr_t ipaddr, ip4_addr_t netmask, ip4_addr_t gateway) {
+	LOG_DEBUG("Bringing network interface down\r");
+	netif_set_down(&gnetif);
+	LOG_DEBUG("Setting new network interface address\r");
+	netif_set_addr(&gnetif, &ipaddr, &netmask, &gateway);
+	ethernetif_update_config(&gnetif);
+	LOG_DEBUG("Bringing network interface up\r");
+	netif_set_up(&gnetif);
 	return TCP_SERVER_ERR_OK;
 }
 
@@ -180,4 +181,12 @@ err_t send_response(struct tcp_pcb *newpcb, cJSON *resp) {
 
 	free(resp_out);
 	return TCP_SERVER_ERR_OK;
+}
+
+void ethernetif_notify_conn_changed(struct netif *netif) {
+	if (netif_is_up(netif)) {
+		LOG_INFO("Network interface is up\r");
+	} else {
+		LOG_INFO("Network interface is down\r");
+	}
 }

@@ -289,40 +289,28 @@ void handleVerticalNetworkInput(Screen_t *scr, ButtonMask btn) {
 		if (location % 4 == 2) {
 			if (octet > 0) {
 				octet -= 1;
-			} else {
-				octet = 255;
 			}
 		} else if (location % 4 == 1) {
 			if (octet > 9) {
 				octet -= 10;
-			} else {
-				octet = (octet + 246) % 256;
 			}
 		} else if (location % 4 == 0) {
 			if (octet > 99) {
 				octet -= 100;
-			} else {
-				octet = (octet + 156) % 256;
 			}
 		}
 	} else if (btn & BTN_UP) {
 		if (location % 4 == 2) {
 			if (octet < 255) {
 				octet += 1;
-			} else {
-				octet = 0;
 			}
 		} else if (location % 4 == 1) {
 			if (octet < 246) {
 				octet += 10;
-			} else {
-				octet = (octet + 10) % 256;
 			}
 		} else if (location % 4 == 0) {
 			if (octet < 156) {
 				octet += 100;
-			} else {
-				octet = (octet + 100) % 256;
 			}
 		}
 	}

@@ -83,8 +83,7 @@ Screen_t scrNetwork = {
 	.allowedButtons = BTN_DOWN | BTN_UP | BTN_ENTER,
 	.handleInput = &mainInput,
 	.function = &mainRender,
-	.renderOptions =
-		OPTIONS_PRINT_HEADER | OPTIONS_PRINT_ENTER_ICON | OPTIONS_PRINT_HORIZONTAL_SELECTOR | OPTIONS_PRINT_INLINE,
+	.renderOptions = OPTIONS_PRINT_VERTICAL_SELECTOR | OPTIONS_PRINT_ENTER_ICON,
 };
 
 // Submenu of network

@@ -34,6 +34,7 @@ void drainRx(uint32_t timeoutMs);
 void appendCrc16(uint8_t *data, uint16_t offset);
 
 ModbusError_t Modbus_init(void) {
+	LOG_INFO("Initializing Modbus\r");
 	static uint8_t pdata[256] = { 0 };
 	hcbuf_modbus = cbuf_init(pdata, 256);
 	if (hcbuf_modbus == NULL) {
