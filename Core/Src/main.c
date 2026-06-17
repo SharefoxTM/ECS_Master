@@ -29,8 +29,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "TCP/tcp_server.h"
+#include "eeprom.h"
 #include "modbus/modbus.h"
 #include <stdio.h>
+
 
 /* USER CODE END Includes */
 
@@ -103,6 +105,7 @@ int main(void) {
 	/* USER CODE BEGIN 2 */
 	screen_init();
 	Modbus_init();
+	eeprom_init();
 	tcp_server_init(tcp_server_pcb);
 	screen_show(SCREEN_HOME);
 	printSplashScreen();

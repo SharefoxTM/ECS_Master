@@ -20,6 +20,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "lwip.h"
+#include "ip4_addr.h"
 #include "lwip/init.h"
 #include "lwip/netif.h"
 #if defined(__CC_ARM) /* MDK ARM Compiler */
@@ -28,7 +29,7 @@
 #include "ethernetif.h"
 
 /* USER CODE BEGIN 0 */
-
+#include "eeprom.h"
 /* USER CODE END 0 */
 /* Private function prototypes -----------------------------------------------*/
 /* ETH Variables initialization ----------------------------------------------*/
@@ -48,7 +49,7 @@ uint8_t NETMASK_ADDRESS[4];
 uint8_t GATEWAY_ADDRESS[4];
 
 /* USER CODE BEGIN 2 */
-
+extern __attribute__((__section__(".config_data"))) uint32_t userConfig[4];
 /* USER CODE END 2 */
 
 /**
@@ -70,6 +71,40 @@ void MX_LWIP_Init(void) {
 	GATEWAY_ADDRESS[3] = 1;
 
 	/* USER CODE BEGIN IP_ADDRESSES */
+	if (userConfig[0] != MAGIC_BYTES_CHECKER) {
+		if (!__USE_VPN__) {
+			IP_ADDRESS[0] = 192;
+			IP_ADDRESS[1] = 168;
+			IP_ADDRESS[2] = 69;
+			IP_ADDRESS[3] = 207;
+			NETMASK_ADDRESS[0] = 255;
+			NETMASK_ADDRESS[1] = 255;
+			NETMASK_ADDRESS[2] = 255;
+			NETMASK_ADDRESS[3] = 0;
+			GATEWAY_ADDRESS[0] = 192;
+			GATEWAY_ADDRESS[1] = 168;
+			GATEWAY_ADDRESS[2] = 69;
+			GATEWAY_ADDRESS[3] = 1;
+		}
+	} else {
+		LOG_VERBOSE("Reading network configuration from EEPROM\r");
+		LOG_VERBOSE("IP Address: %d.%d.%d.%d\r", ((uint8_t *)&userConfig[1])[0], ((uint8_t *)&userConfig[1])[1],
+								((uint8_t *)&userConfig[1])[2], ((uint8_t *)&userConfig[1])[3]);
+		IP_ADDRESS[0] = ((uint8_t *)&userConfig[1])[0];
+		IP_ADDRESS[1] = ((uint8_t *)&userConfig[1])[1];
+		IP_ADDRESS[2] = ((uint8_t *)&userConfig[1])[2];
+		IP_ADDRESS[3] = ((uint8_t *)&userConfig[1])[3];
+
+		NETMASK_ADDRESS[0] = ((uint8_t *)&userConfig[2])[0];
+		NETMASK_ADDRESS[1] = ((uint8_t *)&userConfig[2])[1];
+		NETMASK_ADDRESS[2] = ((uint8_t *)&userConfig[2])[2];
+		NETMASK_ADDRESS[3] = ((uint8_t *)&userConfig[2])[3];
+
+		GATEWAY_ADDRESS[0] = ((uint8_t *)&userConfig[3])[0];
+		GATEWAY_ADDRESS[1] = ((uint8_t *)&userConfig[3])[1];
+		GATEWAY_ADDRESS[2] = ((uint8_t *)&userConfig[3])[2];
+		GATEWAY_ADDRESS[3] = ((uint8_t *)&userConfig[3])[3];
+	}
 	/* USER CODE END IP_ADDRESSES */
 
 	/* Initialize the LwIP stack without RTOS */

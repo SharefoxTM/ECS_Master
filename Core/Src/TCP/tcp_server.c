@@ -1,4 +1,5 @@
 #include "TCP/tcp_server.h"
+#include "eeprom.h"
 
 void error(void *arg, err_t err);
 
@@ -99,6 +100,7 @@ tcp_server_error_t tcp_server_change_address(ip4_addr_t ipaddr, ip4_addr_t netma
 	ethernetif_update_config(&gnetif);
 	LOG_DEBUG("Bringing network interface up\r");
 	netif_set_up(&gnetif);
+	eeprom_write((uint32_t[]){ MAGIC_BYTES_CHECKER, ipaddr.addr, netmask.addr, gateway.addr }, 4);
 	return TCP_SERVER_ERR_OK;
 }
 

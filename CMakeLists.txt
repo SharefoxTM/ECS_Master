@@ -57,6 +57,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     ./Core/Src/SSD1803A/SSD1803A_driver.c
     ./Core/Src/SSD1803A/screens.c
     ./Core/Src/Utilities/log.c
+    ./Core/Src/eeprom.c
 
 )
 
