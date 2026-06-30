@@ -18,7 +18,7 @@
 
 extern struct tcp_pcb *tcp_server_pcb;
 
-tcp_server_error_t tcp_server_init(struct tcp_pcb *tcp_server_pcb);
+tcp_server_error_t tcp_server_init(struct tcp_pcb **tcp_server_pcb);
 tcp_server_error_t tcp_server_close(struct tcp_pcb *tpcb, tcp_server_struct_t *es);
 tcp_server_error_t tcp_server_error(struct tcp_pcb *tpcb, tcp_server_struct_t *es, tcp_server_error_t err);
 tcp_server_error_t tcp_server_send_response(struct tcp_pcb *tpcb, const cJSON *resp);

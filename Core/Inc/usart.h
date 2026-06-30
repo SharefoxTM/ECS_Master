@@ -45,6 +45,7 @@ void MX_USART1_UART_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 void printSplashScreen(void);
+void printNetworkInfo(void);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus
@@ -52,3 +53,4 @@ void printSplashScreen(void);
 #endif
 
 #endif /* __USART_H__ */
+

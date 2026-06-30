@@ -10,7 +10,7 @@
 #define MODBUS_CONF_H
 
 #define MODBUS_SLAVE_BROADCAST 0x0000
-#define MODBUS_MAX_SLAVES			 16
+#define MODBUS_MAX_SLAVES			 1
 #define MODBUS_RX_TIMEOUT_MS	 100
 
 #define MODBUS_LEDMODE_OFF	 0x0000
@@ -54,10 +54,10 @@ typedef enum Commands {
 } Commands_t;
 
 typedef enum LEDMode {
-	LEDMODE_OFF,
 	LEDMODE_ON,
 	LEDMODE_VEGAS,
 	LEDMODE_KR,
+	LEDMODE_OFF,
 } LEDMode_t;
 
 typedef enum {

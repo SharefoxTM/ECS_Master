@@ -18,21 +18,21 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "SSD1803A/screens.h"
 #include "dma.h"
 #include "gpio.h"
 #include "i2c.h"
 #include "lwip.h"
+#include "modbus/circularBuffer.h"
 #include "tim.h"
 #include "usart.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "SSD1803A/screens.h"
 #include "TCP/tcp_server.h"
 #include "eeprom.h"
 #include "modbus/modbus.h"
 #include <stdio.h>
-
 
 /* USER CODE END Includes */
 
@@ -54,7 +54,7 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+extern cbuf_handle_t hcbuf_modbus;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -65,7 +65,7 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+extern struct netif gnetif;
 /* USER CODE END 0 */
 
 /**
@@ -103,13 +103,21 @@ int main(void) {
 	MX_USART1_UART_Init();
 	MX_LWIP_Init();
 	/* USER CODE BEGIN 2 */
+	/* Close any stale TCP server PCB from previous execution (software reset) */
+	if (tcp_server_pcb != NULL) {
+		tcp_close(tcp_server_pcb);
+		tcp_server_pcb = NULL;
+	}
+
 	screen_init();
 	Modbus_init();
 	eeprom_init();
-	tcp_server_init(tcp_server_pcb);
+	if (tcp_server_init(&tcp_server_pcb) != TCP_SERVER_ERR_OK) {
+		LOG_ERROR("Failed to initialize TCP server\r");
+	}
 	screen_show(SCREEN_HOME);
 	printSplashScreen();
-
+	printNetworkInfo();
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -120,6 +128,8 @@ int main(void) {
 		/* USER CODE BEGIN 3 */
 		MX_LWIP_Process();
 		gpio_getUserInput();
+		Modbus_parsePackage(hcbuf_modbus);
+		HAL_Delay(100);
 	}
 	/* USER CODE END 3 */
 }

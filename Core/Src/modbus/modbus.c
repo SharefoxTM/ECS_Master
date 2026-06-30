@@ -2,6 +2,7 @@
 #include "Utilities/log.h"
 #include "main.h"
 #include "modbus/circularBuffer.h"
+#include "stm32f1xx_hal.h"
 #include "stm32f1xx_hal_def.h"
 #include "stm32f1xx_hal_uart.h"
 #include "usart.h"
@@ -35,6 +36,7 @@ void appendCrc16(uint8_t *data, uint16_t offset);
 
 ModbusError_t Modbus_init(void) {
 	LOG_INFO("Initializing Modbus\r");
+	HAL_Delay(1000); // Give slaves some time to startup when poweron
 	static uint8_t pdata[256] = { 0 };
 	hcbuf_modbus = cbuf_init(pdata, 256);
 	if (hcbuf_modbus == NULL) {
@@ -179,6 +181,8 @@ HAL_StatusTypeDef Modbus_GetStatus(uint8_t address, uint64_t *status) {
 }
 
 ModbusError_t Modbus_parsePackage(cbuf_handle_t cb) {
+	if (cbuf_empty(cb))
+		return MODBUS_OK;
 	uint8_t slaveAddress, functionCode, coilAddress[2];
 
 	// Read address byte
@@ -193,6 +197,9 @@ ModbusError_t Modbus_parsePackage(cbuf_handle_t cb) {
 	if (cbuf_get(cb, coilAddress, 2) != CB_OK) {
 		return MODBUS_ERR_INVALID_FUNCTION;
 	}
+
+	LOG_VERBOSE("Gotten following from buffer: 0x%x 0x%x 0x%x", slaveAddress, functionCode,
+							coilAddress[0] << 8 | coilAddress[1]);
 
 	uint8_t data[256];
 	if (functionCode & MODBUS_ERROR_RESPONSE_MASK) {
@@ -223,8 +230,11 @@ ModbusError_t Modbus_parsePackage(cbuf_handle_t cb) {
 		return MODBUS_ERR_INVALID_FUNCTION;
 	}
 
+	LOG_VERBOSE("Gotten following from buffer: 0x%x 0x%x 0x%x", slaveAddress, functionCode, data[0] << 8 | data[1]);
+
 	uint8_t package[] = { slaveAddress, functionCode, data[0], data[1] };
 	uint16_t crc = crcholder[0] | (crcholder[1] << 8);
+	cbuf_reset(cb);
 	if (crc16(package, sizeof(package)) != crc) {
 		return MODBUS_ERR_CRC_MISMATCH;
 	}

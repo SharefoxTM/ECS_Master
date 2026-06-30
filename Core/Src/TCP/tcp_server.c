@@ -1,4 +1,5 @@
 #include "TCP/tcp_server.h"
+#include "TCP/tcp_typedefs.h"
 #include "eeprom.h"
 
 void error(void *arg, err_t err);
@@ -14,18 +15,24 @@ extern struct netif gnetif;
 
 /**
  * @brief  Initialize the TCP server
- * @param  None
+ * @param  tcp_server_pcb: Pointer to the TCP protocol control block pointer
  * @retval tcp_server_error_t: Error code indicating success or type of failure
  */
-tcp_server_error_t tcp_server_init(struct tcp_pcb *tcp_server_pcb) {
+tcp_server_error_t tcp_server_init(struct tcp_pcb **tcp_server_pcb) {
 	LOG_INFO("Initializing TCP server\r");
-	tcp_server_pcb = tcp_new();
 	if (!tcp_server_pcb) {
+		return TCP_SERVER_ERR_VAL;
+	}
+
+	*tcp_server_pcb = tcp_new();
+	if (!*tcp_server_pcb) {
 		return TCP_SERVER_ERR_MEM;
 	}
-	if (tcp_bind(tcp_server_pcb, IP_ADDR_ANY, 5050) == TCP_SERVER_ERR_OK) {
-		tcp_server_pcb = tcp_listen(tcp_server_pcb);
-		tcp_accept(tcp_server_pcb, accept);
+
+	if (tcp_bind(*tcp_server_pcb, IP_ADDR_ANY, 5050) == ERR_OK) {
+		*tcp_server_pcb = tcp_listen(*tcp_server_pcb);
+		tcp_accept(*tcp_server_pcb, accept);
+		LOG_INFO("TCP server listening on port 5050\r");
 		return TCP_SERVER_ERR_OK;
 	}
 
@@ -60,10 +67,14 @@ tcp_server_error_t tcp_server_close(struct tcp_pcb *tpcb, tcp_server_struct_t *e
  * failure
  */
 tcp_server_error_t tcp_server_error(struct tcp_pcb *tpcb, tcp_server_struct_t *es, tcp_server_error_t err) {
-	LWIP_UNUSED_ARG(err);
-	LWIP_UNUSED_ARG(tpcb);
 	LWIP_UNUSED_ARG(es);
-	// TODO: implement error handling
+	cJSON *resp = cJSON_CreateObject();
+	cJSON_AddItemToObject(resp, "mode", cJSON_CreateString("error"));
+	cJSON_AddItemToObject(resp, "status", cJSON_CreateNumber(HTTP_STATUS_INTERNAL_SERVER_ERROR));
+	cJSON_AddItemToObject(resp, "data", cJSON_CreateNumber(err));
+	tcp_server_send_response(tpcb, resp);
+	cJSON_Delete(resp);
+
 	return TCP_SERVER_ERR_OK;
 }
 
@@ -76,11 +87,23 @@ tcp_server_error_t tcp_server_error(struct tcp_pcb *tpcb, tcp_server_struct_t *e
  *  failure
  */
 tcp_server_error_t tcp_server_send_response(struct tcp_pcb *tpcb, const cJSON *resp) {
+	if (!tpcb || !resp) {
+		return TCP_SERVER_ERR_VAL;
+	}
+
 	char *resp_out = cJSON_Print(resp);
-	tcp_write(tpcb, resp_out, strlen(resp_out), 0);
-	tcp_arg(tpcb, resp_out);
-	tcp_sent(tpcb, sent);
+	if (!resp_out) {
+		return TCP_SERVER_ERR_MEM;
+	}
+
+	err_t err = tcp_write(tpcb, (uint8_t *)resp_out, strlen(resp_out), TCP_WRITE_FLAG_COPY);
 	free(resp_out);
+
+	if (err != ERR_OK) {
+		return TCP_SERVER_ERR_CONN;
+	}
+
+	tcp_sent(tpcb, sent);
 	return TCP_SERVER_ERR_OK;
 }
 
@@ -93,19 +116,14 @@ tcp_server_error_t tcp_server_send_response(struct tcp_pcb *tpcb, const cJSON *r
  *   failure
  */
 tcp_server_error_t tcp_server_change_address(ip4_addr_t ipaddr, ip4_addr_t netmask, ip4_addr_t gateway) {
-	LOG_DEBUG("Bringing network interface down\r");
-	netif_set_down(&gnetif);
 	LOG_DEBUG("Setting new network interface address\r");
 	netif_set_addr(&gnetif, &ipaddr, &netmask, &gateway);
 	ethernetif_update_config(&gnetif);
-	LOG_DEBUG("Bringing network interface up\r");
-	netif_set_up(&gnetif);
 	eeprom_write((uint32_t[]){ MAGIC_BYTES_CHECKER, ipaddr.addr, netmask.addr, gateway.addr }, 4);
 	return TCP_SERVER_ERR_OK;
 }
 
 void error(void *arg, err_t err) {
-	// TODO: implement error handling
 	tcp_server_struct_t *es = (tcp_server_struct_t *)arg;
 	LWIP_UNUSED_ARG(err);
 	if (es != NULL) {
@@ -176,13 +194,24 @@ err_t sent(void *arg, struct tcp_pcb *tpcb, uint16_t len) {
 }
 
 err_t send_response(struct tcp_pcb *newpcb, cJSON *resp) {
-	char *resp_out = cJSON_Print(resp);
-	tcp_write(newpcb, resp_out, strlen(resp_out), 0);
-	tcp_arg(newpcb, resp_out);
-	tcp_sent(newpcb, sent);
+	if (!newpcb || !resp) {
+		return ERR_ARG;
+	}
 
+	char *resp_out = cJSON_Print(resp);
+	if (!resp_out) {
+		return ERR_MEM;
+	}
+
+	err_t err = tcp_write(newpcb, (uint8_t *)resp_out, strlen(resp_out), TCP_WRITE_FLAG_COPY);
 	free(resp_out);
-	return TCP_SERVER_ERR_OK;
+
+	if (err != ERR_OK) {
+		return err;
+	}
+
+	tcp_sent(newpcb, sent);
+	return ERR_OK;
 }
 
 void ethernetif_notify_conn_changed(struct netif *netif) {
